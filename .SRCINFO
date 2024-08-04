@@ -1,17 +1,22 @@
 pkgbase = pulseaudio-equalizer-ladspa
 	pkgdesc = A 15-band equalizer for PulseAudio
 	pkgver = 3.0.2
-	pkgrel = 7
+	pkgrel = 8
 	url = https://github.com/pulseaudio-equalizer-ladspa/equalizer
 	arch = any
-	license = GPL3
+	license = GPL-3.0-only
+	makedepends = git
 	makedepends = meson
-	depends = python-gobject
-	depends = gtk3
-	depends = swh-plugins
-	depends = pulseaudio
+	depends = bash
 	depends = bc
-	source = pulseaudio-equalizer-ladspa-3.0.2.tar.gz::https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz
-	sha512sums = a916d55f02002de3f0053b0bf1e6f2315e517caa42d6b1e5d19268d895376d990a793d73f52e0050e44b391d61c190c3be23ccf31cef018521740c6cc0a728e0
+	depends = glib2
+	depends = gtk3
+	depends = libpulse
+	depends = pulse-native-provider
+	depends = python
+	depends = python-gobject
+	depends = swh-plugins
+	source = pulseaudio-equalizer-ladspa::git+https://github.com/pulseaudio-equalizer-ladspa/equalizer#tag=v3.0.2
+	b2sums = e5b817cf942505078c7fa42542b775fb81cfea802927badfe4d41bffb479f777bad11f7434f4a6932f7a51149c02b29f2bd5115968d3a596ae118eb9e8af9b30
 
 pkgname = pulseaudio-equalizer-ladspa
