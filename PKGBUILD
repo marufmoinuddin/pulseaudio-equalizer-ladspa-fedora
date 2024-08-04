@@ -2,7 +2,7 @@
 
 pkgname=pulseaudio-equalizer-ladspa
 pkgver=3.0.2
-pkgrel=8
+pkgrel=9
 pkgdesc="A 15-band equalizer for PulseAudio"
 url="https://github.com/pulseaudio-equalizer-ladspa/equalizer"
 license=(GPL-3.0-only)
@@ -12,8 +12,7 @@ depends=(
   bc
   glib2
   gtk3
-  libpulse
-  pulse-native-provider
+  pulseaudio  # Uses pacmd, which is not supported by pipewire-pulse
   python
   python-gobject
   swh-plugins
