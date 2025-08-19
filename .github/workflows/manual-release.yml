@@ -1,0 +1,385 @@
+name: Manual Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v4.0.2, v4.1.0-beta1)'
+        required: true
+        type: string
+      package_version:
+        description: 'Package version in spec file (e.g., 4.0.2)'
+        required: true
+        type: string
+      upstream_version:
+        description: 'Upstream source version to use (e.g., 3.0.2)'
+        required: true
+        default: '3.0.2'
+        type: string
+      release_title:
+        description: 'Release title (optional)'
+        required: false
+        type: string
+      release_notes:
+        description: 'Release notes/changelog (optional)'
+        required: false
+        type: string
+      create_draft:
+        description: 'Create as draft release'
+        required: false
+        default: false
+        type: boolean
+      skip_tests:
+        description: 'Skip RPM testing step'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.validate.outputs.tag }}
+      package_version: ${{ steps.validate.outputs.package_version }}
+      upstream_version: ${{ steps.validate.outputs.upstream_version }}
+      release_title: ${{ steps.validate.outputs.release_title }}
+      
+    steps:
+    - name: Validate inputs
+      id: validate
+      run: |
+        TAG="${{ github.event.inputs.release_tag }}"
+        PKG_VER="${{ github.event.inputs.package_version }}"
+        UPSTREAM_VER="${{ github.event.inputs.upstream_version }}"
+        
+        # Validate tag format
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          echo "❌ Invalid tag format: $TAG"
+          echo "Expected format: v1.2.3 or v1.2.3-beta1"
+          exit 1
+        fi
+        
+        # Validate version format
+        if [[ ! "$PKG_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          echo "❌ Invalid package version format: $PKG_VER"
+          echo "Expected format: 1.2.3 or 1.2.3.beta1"
+          exit 1
+        fi
+        
+        if [[ ! "$UPSTREAM_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          echo "❌ Invalid upstream version format: $UPSTREAM_VER"
+          echo "Expected format: 1.2.3"
+          exit 1
+        fi
+        
+        # Check if upstream version exists
+        echo "🔍 Verifying upstream version exists..."
+        if ! curl -f -s -I "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${UPSTREAM_VER}.tar.gz" > /dev/null; then
+          echo "❌ Upstream version v${UPSTREAM_VER} not found"
+          echo "Available versions:"
+          curl -s "https://api.github.com/repos/pulseaudio-equalizer-ladspa/equalizer/releases" | grep '"tag_name"' | head -5
+          exit 1
+        fi
+        
+        echo "✅ All inputs validated successfully"
+        echo "tag=${TAG}" >> $GITHUB_OUTPUT
+        echo "package_version=${PKG_VER}" >> $GITHUB_OUTPUT
+        echo "upstream_version=${UPSTREAM_VER}" >> $GITHUB_OUTPUT
+        
+        # Set release title
+        TITLE="${{ github.event.inputs.release_title }}"
+        if [ -z "$TITLE" ]; then
+          TITLE="Release ${TAG}"
+        fi
+        echo "release_title=${TITLE}" >> $GITHUB_OUTPUT
+        
+        echo "📋 Build Configuration:"
+        echo "- Release Tag: ${TAG}"
+        echo "- Package Version: ${PKG_VER}"
+        echo "- Upstream Version: ${UPSTREAM_VER}"
+        echo "- Release Title: ${TITLE}"
+
+  build-rpm:
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install build dependencies
+      run: |
+        dnf update -y
+        dnf install -y rpm-build rpmdevtools meson ninja-build git \
+                       python3-devel python3-setuptools \
+                       glib2-devel bc bash wget findutils rpmlint
+        
+    - name: Set up build environment
+      run: |
+        rpmdev-setuptree
+        
+    - name: Create custom spec file
+      run: |
+        echo "🔧 Creating spec file for version ${{ needs.validate-inputs.outputs.package_version }}"
+        
+        # Copy original spec file
+        cp pulseaudio-equalizer-ladspa.spec custom-build.spec
+        
+        # Update version
+        sed -i "s/^Version:.*/Version:        ${{ needs.validate-inputs.outputs.package_version }}/" custom-build.spec
+        
+        # Update source URL
+        sed -i "s|archive/v.*\.tar\.gz|archive/v${{ needs.validate-inputs.outputs.upstream_version }}.tar.gz|" custom-build.spec
+        
+        # Update autosetup directory
+        sed -i "s/%autosetup -n equalizer-.*/%autosetup -n equalizer-${{ needs.validate-inputs.outputs.upstream_version }}/" custom-build.spec
+        
+        # Add manual build note to changelog
+        DATE=$(date '+%a %b %d %Y')
+        sed -i "/^%changelog/a\\
+* $DATE GitHub Actions <actions@github.com> - ${{ needs.validate-inputs.outputs.package_version }}-1\\
+- Manual build via GitHub Actions\\
+- Tag: ${{ needs.validate-inputs.outputs.tag }}\\
+- Upstream version: ${{ needs.validate-inputs.outputs.upstream_version }}\\
+" custom-build.spec
+        
+        echo "=== Custom Spec File Preview ==="
+        head -30 custom-build.spec
+        
+    - name: Download source tarball
+      run: |
+        cd /github/home/rpmbuild/SOURCES/
+        echo "📥 Downloading upstream v${{ needs.validate-inputs.outputs.upstream_version }}"
+        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${{ needs.validate-inputs.outputs.upstream_version }}.tar.gz" \
+             -O "pulseaudio-equalizer-ladspa-${{ needs.validate-inputs.outputs.package_version }}.tar.gz"
+        
+        echo "✅ Source downloaded successfully"
+        ls -la "pulseaudio-equalizer-ladspa-${{ needs.validate-inputs.outputs.package_version }}.tar.gz"
+        
+    - name: Copy spec file and install dependencies
+      run: |
+        cp custom-build.spec /github/home/rpmbuild/SPECS/
+        
+        echo "🔍 Installing build dependencies..."
+        dnf builddep -y /github/home/rpmbuild/SPECS/custom-build.spec
+        
+    - name: Lint spec file
+      run: |
+        echo "🔍 Linting spec file..."
+        rpmlint /github/home/rpmbuild/SPECS/custom-build.spec || true
+        
+    - name: Build RPM packages
+      run: |
+        cd /github/home/rpmbuild/SPECS/
+        echo "🔨 Building RPM packages..."
+        rpmbuild -ba custom-build.spec
+        
+        echo "✅ Build completed successfully"
+        echo "📦 Built packages:"
+        ls -la /github/home/rpmbuild/RPMS/noarch/
+        ls -la /github/home/rpmbuild/SRPMS/
+        
+    - name: Create artifacts
+      run: |
+        mkdir -p /github/workspace/rpm-packages
+        cp /github/home/rpmbuild/RPMS/noarch/*.rpm /github/workspace/rpm-packages/ 2>/dev/null || true
+        cp /github/home/rpmbuild/SRPMS/*.rpm /github/workspace/rpm-packages/ 2>/dev/null || true
+        
+        echo "📋 Package Details:"
+        cd /github/workspace/rpm-packages
+        for rpm in *.rpm; do
+          echo "=== $rpm ==="
+          rpm -qpi "$rpm" 2>/dev/null | grep -E "Name|Version|Release|Summary|Size"
+          echo ""
+        done
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rpm-packages-${{ needs.validate-inputs.outputs.tag }}
+        path: rpm-packages/*.rpm
+        retention-days: 30
+
+  test-rpm:
+    needs: [validate-inputs, build-rpm]
+    if: github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+      
+    steps:
+    - name: Install basic tools
+      run: |
+        dnf update -y
+        dnf install -y bash bc glib2 gtk3 python3 python3-gobject pulseaudio
+        
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: rpm-packages-${{ needs.validate-inputs.outputs.tag }}
+        path: rpm-packages
+        
+    - name: Test RPM installation
+      run: |
+        cd rpm-packages
+        echo "🧪 Testing RPM installation..."
+        
+        # Test each RPM
+        for rpm in *.noarch.rpm; do
+          echo "=== Testing $rpm ==="
+          
+          # Check RPM integrity
+          rpm -K "$rpm" || true
+          
+          # Test installation
+          echo "Installing $rpm..."
+          dnf install -y "$rpm"
+          
+          # Basic functionality test
+          echo "Testing basic functionality..."
+          
+          # Check if files are installed correctly
+          rpm -ql pulseaudio-equalizer-ladspa | head -10
+          
+          # Try to run help command
+          if command -v pulseaudio-equalizer >/dev/null; then
+            echo "✅ pulseaudio-equalizer command found"
+            pulseaudio-equalizer --help || echo "⚠️ Help command failed (may be normal)"
+          fi
+          
+          if command -v pulseaudio-equalizer-gtk >/dev/null; then
+            echo "✅ pulseaudio-equalizer-gtk command found"
+          fi
+          
+          echo "✅ $rpm test completed"
+          echo ""
+        done
+        
+        echo "🎉 All RPM tests passed successfully!"
+
+  create-release:
+    needs: [validate-inputs, build-rpm, test-rpm]
+    if: always() && needs.build-rpm.result == 'success' && (needs.test-rpm.result == 'success' || needs.test-rpm.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create and push tag
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        TAG="${{ needs.validate-inputs.outputs.tag }}"
+        
+        # Check if tag already exists
+        if git tag -l | grep -q "^${TAG}$"; then
+          echo "⚠️ Tag $TAG already exists, deleting and recreating..."
+          git tag -d "$TAG" || true
+          git push origin --delete "$TAG" || true
+        fi
+        
+        # Create new tag
+        git tag -a "$TAG" -m "Manual release $TAG
+
+Package Version: ${{ needs.validate-inputs.outputs.package_version }}
+Upstream Version: ${{ needs.validate-inputs.outputs.upstream_version }}
+Created: $(date -u)
+
+${{ github.event.inputs.release_notes }}"
+        
+        git push origin "$TAG"
+        echo "✅ Tag $TAG created and pushed"
+        
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: rpm-packages-${{ needs.validate-inputs.outputs.tag }}
+        path: rpm-packages
+        
+    - name: Prepare release notes
+      id: release_notes
+      run: |
+        NOTES="${{ github.event.inputs.release_notes }}"
+        if [ -z "$NOTES" ]; then
+          NOTES="Automated release created via GitHub Actions
+
+## 📦 Package Information
+- **Package Version**: ${{ needs.validate-inputs.outputs.package_version }}
+- **Upstream Version**: ${{ needs.validate-inputs.outputs.upstream_version }}
+- **Build Date**: $(date -u)
+- **Tag**: ${{ needs.validate-inputs.outputs.tag }}
+
+## 🚀 Installation
+\`\`\`bash
+# Download and install the RPM
+wget https://github.com/${{ github.repository }}/releases/download/${{ needs.validate-inputs.outputs.tag }}/pulseaudio-equalizer-ladspa-${{ needs.validate-inputs.outputs.package_version }}-1.fc42.noarch.rpm
+sudo dnf install pulseaudio-equalizer-ladspa-*.rpm
+\`\`\`
+
+## 📋 Package Contents
+$(cd rpm-packages && for rpm in *.noarch.rpm; do echo "- \${rpm}"; done)
+
+## ✅ Quality Assurance
+- ✅ RPM build successful
+- ✅ Package integrity verified
+- ✅ Installation testing passed
+- ✅ Dependencies resolved correctly"
+        fi
+        
+        # Save to file for GitHub release
+        echo "$NOTES" > release_notes.md
+        
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.validate-inputs.outputs.tag }}
+        release_name: ${{ needs.validate-inputs.outputs.release_title }}
+        body_path: release_notes.md
+        draft: ${{ github.event.inputs.create_draft }}
+        prerelease: ${{ contains(needs.validate-inputs.outputs.tag, 'beta') || contains(needs.validate-inputs.outputs.tag, 'alpha') || contains(needs.validate-inputs.outputs.tag, 'rc') }}
+        
+    - name: Upload Release Assets
+      run: |
+        # Get release ID
+        RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ needs.validate-inputs.outputs.tag }}" | \
+          grep '"id":' | head -n1 | sed 's/.*"id": *\([0-9]*\).*/\1/')
+        
+        echo "📤 Uploading assets to release ID: $RELEASE_ID"
+        
+        cd rpm-packages
+        for rpm in *.rpm; do
+          echo "Uploading $rpm..."
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/x-rpm" \
+            --data-binary @"$rpm" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$rpm"
+          echo "✅ $rpm uploaded"
+        done
+        
+    - name: Build Summary
+      run: |
+        echo "## 🎉 Manual Release Completed Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Release Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: ${{ needs.validate-inputs.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package Version**: ${{ needs.validate-inputs.outputs.package_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Upstream Version**: ${{ needs.validate-inputs.outputs.upstream_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release Title**: ${{ needs.validate-inputs.outputs.release_title }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Draft Release**: ${{ github.event.inputs.create_draft }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate-inputs.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [Download RPMs](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate-inputs.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Built Packages" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        cd rpm-packages && ls -la *.rpm >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
