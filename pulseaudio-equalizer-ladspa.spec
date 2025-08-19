@@ -1,0 +1,63 @@
+%global debug_package %{nil}
+
+Name:           pulseaudio-equalizer-ladspa
+Version:        3.0.2
+Release:        1%{?dist}
+Summary:        A 15-band equalizer for PulseAudio
+License:        GPL-3.0-or-later
+URL:            https://github.com/pulseaudio-equalizer-ladspa/equalizer
+Source0:        %{name}-%{version}.tar.gz
+
+BuildArch:      noarch
+
+BuildRequires:  meson >= 0.46.0
+BuildRequires:  ninja-build
+BuildRequires:  git
+BuildRequires:  python3-devel
+BuildRequires:  python3-setuptools
+
+Requires:       bash
+Requires:       bc
+Requires:       glib2
+Requires:       gtk3
+Requires:       pulseaudio
+Requires:       python3
+Requires:       python3-gobject
+Requires:       ladspa-swh-plugins
+
+%description
+A LADSPA based multiband equalizer approach for getting better sound out of 
+PulseAudio. This equalizer clearly is more potent than the (deprecated), 
+optional one from PulseAudio.
+
+The equalizer provides a 15-band graphic equalizer interface built using 
+GTK3 and PyGObject, allowing real-time audio equalization through PulseAudio's
+LADSPA sink module.
+
+%prep
+%autosetup -n equalizer-%{version}
+
+%build
+%meson
+%meson_build
+
+%install
+%meson_install
+
+%py_byte_compile %{python3} %{buildroot}%{python3_sitelib}
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/pulseaudio-equalizer
+%{_bindir}/pulseaudio-equalizer-gtk
+%{_datadir}/%{name}/
+%{_datadir}/applications/com.github.pulseaudio-equalizer-ladspa.Equalizer.desktop
+%{python3_sitelib}/pulseeq/
+
+%changelog
+* Tue Aug 19 2025 Maruf <maruf@example.com> - 3.0.2-1
+- Initial Fedora 42 package
+- Converted from Arch Linux PKGBUILD
+- Added proper dependencies for Fedora
+- Updated for meson build system

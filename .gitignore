@@ -1,0 +1,55 @@
+# RPM Build artifacts
+rpmbuild/
+*.rpm
+*.src.rpm
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Build directories
+build/
+dist/
+*.egg-info/
+
+# Meson build directories
+builddir/
+*-build/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Archive files (except source tarballs needed for building)
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+!*-source.tar.*
+
+# Local configuration
+.env
+.local
