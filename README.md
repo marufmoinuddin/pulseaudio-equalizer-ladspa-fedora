@@ -76,6 +76,47 @@ pulseaudio-equalizer-gtk
 
 - **[README-fedora.md](README-fedora.md)** - Comprehensive Fedora packaging guide
 - **[SUMMARY.md](SUMMARY.md)** - Detailed conversion summary from Arch to Fedora
+- **[CICD.md](CICD.md)** - Complete CI/CD pipeline documentation
+- **[MANUAL-RELEASE.md](MANUAL-RELEASE.md)** - Manual release workflow guide
+- **[VERSION-MANAGEMENT.md](VERSION-MANAGEMENT.md)** - Version alignment and management
+
+## 🚀 CI/CD & Release Management
+
+This repository includes comprehensive automation:
+
+### 🔄 Automated Workflows
+- **Development Build** - Creates test RPMs on every push
+- **Continuous Integration** - Quality checks and multi-version testing
+- **Release Pipeline** - Automated releases on git tags
+- **Manual Release** - On-demand release creation with custom versions
+
+### 📦 Manual Release Creation
+Create custom releases without git tag pushes:
+
+1. Go to **Actions** → **Manual Build and Release**
+2. Click **Run workflow**
+3. Specify your parameters:
+   ```
+   Release Tag: v4.0.3
+   Package Version: 4.0.3
+   Upstream Version: 3.0.2
+   Release Title: Custom Release v4.0.3
+   ```
+4. Click **Run workflow** to build and publish
+
+See **[MANUAL-RELEASE.md](MANUAL-RELEASE.md)** for complete usage guide.
+
+### 🎯 Quick Release Examples
+```bash
+# Standard release
+Release Tag: v4.0.3, Package: 4.0.3, Upstream: 3.0.2
+
+# Beta release  
+Release Tag: v4.1.0-beta1, Package: 4.1.0.beta1, Upstream: 3.0.2
+
+# Hotfix release
+Release Tag: v4.0.2-hotfix, Package: 4.0.2, Upstream: 3.0.2
+```
 
 ## 🔧 Manual Build Process
 
