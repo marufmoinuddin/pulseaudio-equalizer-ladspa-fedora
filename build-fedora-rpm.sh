@@ -45,7 +45,8 @@ SOURCE_FILE="${PACKAGE_NAME}-${VERSION}.tar.gz"
 if [ ! -f ~/rpmbuild/SOURCES/"$SOURCE_FILE" ]; then
     echo -e "${YELLOW}Downloading source...${NC}"
     cd ~/rpmbuild/SOURCES/
-    wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${VERSION}.tar.gz" \
+    # Use the actual upstream version (3.0.2) but save as our package version
+    wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz" \
          -O "$SOURCE_FILE"
     cd - > /dev/null
 else

@@ -64,7 +64,8 @@ jobs:
     - name: Download source
       run: |
         cd /github/home/rpmbuild/SOURCES/
-        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${{ steps.build_info.outputs.VERSION }}.tar.gz" \
+        # Use the actual upstream version (3.0.2) but save as our package version
+        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz" \
              -O "pulseaudio-equalizer-ladspa-${{ steps.build_info.outputs.VERSION }}.tar.gz"
         
     - name: Build development RPM

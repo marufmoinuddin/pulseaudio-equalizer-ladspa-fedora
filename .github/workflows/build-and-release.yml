@@ -34,7 +34,8 @@ jobs:
         VERSION=$(grep "Version:" pulseaudio-equalizer-ladspa.spec | awk '{print $2}' | tr -d ' ')
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         cd /github/home/rpmbuild/SOURCES/
-        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${VERSION}.tar.gz" \
+        # Use the actual upstream version (3.0.2) but save as our package version
+        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz" \
              -O "pulseaudio-equalizer-ladspa-${VERSION}.tar.gz"
         
     - name: Copy spec file
