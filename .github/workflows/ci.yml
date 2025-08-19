@@ -1,0 +1,164 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, fedora-conversion ]
+    paths:
+      - '**.spec'
+      - '**.sh'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.spec'
+      - '**.sh'
+      - '.github/workflows/**'
+
+jobs:
+  lint-spec:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install RPM tools
+      run: |
+        dnf update -y
+        dnf install -y rpm-build rpmdevtools rpmlint
+        
+    - name: Lint RPM spec file
+      run: |
+        echo "=== RPM Spec Lint Check ==="
+        rpmlint pulseaudio-equalizer-ladspa.spec || true
+        
+    - name: Validate spec syntax
+      run: |
+        echo "=== Spec File Syntax Check ==="
+        rpmspec --parse pulseaudio-equalizer-ladspa.spec > /dev/null
+        echo "✅ Spec file syntax is valid"
+        
+    - name: Check spec file format
+      run: |
+        echo "=== Spec File Analysis ==="
+        echo "Name: $(rpmspec --query --queryformat '%{NAME}\n' pulseaudio-equalizer-ladspa.spec)"
+        echo "Version: $(rpmspec --query --queryformat '%{VERSION}\n' pulseaudio-equalizer-ladspa.spec)"
+        echo "Release: $(rpmspec --query --queryformat '%{RELEASE}\n' pulseaudio-equalizer-ladspa.spec)"
+        echo "License: $(rpmspec --query --queryformat '%{LICENSE}\n' pulseaudio-equalizer-ladspa.spec)"
+        echo "BuildArch: $(rpmspec --query --queryformat '%{ARCH}\n' pulseaudio-equalizer-ladspa.spec)"
+
+  build-test:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+    needs: lint-spec
+    
+    strategy:
+      matrix:
+        fedora-version: [42]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install build dependencies
+      run: |
+        dnf update -y
+        dnf install -y rpm-build rpmdevtools meson ninja-build git \
+                       python3-devel python3-setuptools \
+                       glib2-devel bc bash wget
+        
+    - name: Set up RPM build environment
+      run: |
+        rpmdev-setuptree
+        
+    - name: Download source
+      run: |
+        VERSION=$(grep "Version:" pulseaudio-equalizer-ladspa.spec | awk '{print $2}' | tr -d ' ')
+        echo "Building version: $VERSION"
+        cd /github/home/rpmbuild/SOURCES/
+        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${VERSION}.tar.gz" \
+             -O "pulseaudio-equalizer-ladspa-${VERSION}.tar.gz"
+        ls -la
+        
+    - name: Copy spec and install deps
+      run: |
+        cp pulseaudio-equalizer-ladspa.spec /github/home/rpmbuild/SPECS/
+        dnf builddep -y /github/home/rpmbuild/SPECS/pulseaudio-equalizer-ladspa.spec
+        
+    - name: Build RPM (no install)
+      run: |
+        cd /github/home/rpmbuild/SPECS/
+        rpmbuild -bb pulseaudio-equalizer-ladspa.spec
+        
+    - name: Check build results
+      run: |
+        echo "=== Build completed successfully ==="
+        find /github/home/rpmbuild -name "*.rpm" -exec ls -lh {} \;
+        
+    - name: Quick package verification
+      run: |
+        cd /github/home/rpmbuild/RPMS/noarch/
+        for rpm in *.rpm; do
+          echo "=== Package: $rpm ==="
+          rpm -qp --info "$rpm"
+          echo "Files count: $(rpm -qpl "$rpm" | wc -l)"
+        done
+
+  shell-lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install ShellCheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+        
+    - name: Lint shell scripts
+      run: |
+        echo "=== Shell Script Lint Check ==="
+        find . -name "*.sh" -type f | while read -r script; do
+          echo "Checking: $script"
+          shellcheck "$script" || true
+        done
+
+  documentation-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check documentation files
+      run: |
+        echo "=== Documentation Check ==="
+        
+        # Check required files exist
+        files=("README.md" "README-fedora.md" "SUMMARY.md" "pulseaudio-equalizer-ladspa.spec")
+        for file in "${files[@]}"; do
+          if [[ -f "$file" ]]; then
+            echo "✅ $file exists"
+          else
+            echo "❌ $file missing"
+            exit 1
+          fi
+        done
+        
+        # Check README has basic sections
+        echo "=== README.md Content Check ==="
+        sections=("Installation" "Dependencies" "Build" "License")
+        for section in "${sections[@]}"; do
+          if grep -q "$section" README.md; then
+            echo "✅ $section section found"
+          else
+            echo "⚠️  $section section not found"
+          fi
+        done
+        
+        echo "=== File Sizes ==="
+        ls -lh *.md *.spec *.sh | head -10
