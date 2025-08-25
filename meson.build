@@ -1,6 +1,6 @@
-project('pulseaudio-equalizer-ladspa',
-    version: '2.7.2',
-    meson_version: '>= 0.46.0'
+project('pulseaudio-equalizer-ladspa', 'c',
+  version: '2.7.7-pipewire',
+  license: 'GPL-3.0'
 )
 
 pymod = import('python')

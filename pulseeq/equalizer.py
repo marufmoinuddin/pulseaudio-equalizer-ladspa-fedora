@@ -24,9 +24,11 @@ from pulseeq.constants import *
 global output_selected
 global num_profiles
 global profiles
+global profile_sinks  # Store actual sink names corresponding to profiles
 output_selected = 0
 num_profiles = 0
 profiles = []
+profile_sinks = []  # New list to store sink names
 
 def GetSettings():
     global rawdata
@@ -107,9 +109,11 @@ def ApplySettings():
 def GetOutputDevices():
     """Get available output devices using pactl"""
     global profiles
+    global profile_sinks
     global num_profiles
     
     profiles = []
+    profile_sinks = []
     
     try:
         # Get sinks using pactl
@@ -135,16 +139,20 @@ def GetOutputDevices():
                                 friendly_name = sink_name
                             
                             profiles.append(friendly_name)
+                            profile_sinks.append(sink_name)  # Store the actual sink name
     
     except Exception as e:
         print(f"Error getting output devices: {e}")
         profiles = ["Default Output"]
+        profile_sinks = ["default"]
     
     if not profiles:
         profiles = ["Default Output"]
+        profile_sinks = ["default"]
     
     num_profiles = len(profiles)
     print(f"Found {num_profiles} output devices: {profiles}")
+    print(f"Corresponding sink names: {profile_sinks}")
 
 def ApplySettings():
     print('Applying settings...')
@@ -281,12 +289,38 @@ class Equalizer(Gtk.ApplicationWindow):
         global output_selected
         global num_profiles
         global profiles
+        global profile_sinks
         output_selected = widget.get_active()
         
         if output_selected != -1 and output_selected < num_profiles:
-            print(f'Output device changed to: {profiles[output_selected]} [index: {output_selected}]')
-            # Here you could add logic to switch the equalizer to the new output
-            # For now, we just print the selection
+            selected_profile = profiles[output_selected]
+            selected_sink = profile_sinks[output_selected] if output_selected < len(profile_sinks) else "default"
+            
+            print(f'Output device changed to: {selected_profile} [sink: {selected_sink}]')
+            
+            # Switch the equalizer to the new output device
+            if selected_sink != "default":
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        f"pulseaudio-equalizer update-output {selected_sink}",
+                        shell=True, capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        print(f"Successfully switched equalizer to: {selected_profile}")
+                        # Refresh settings to ensure GUI is up to date
+                        GetSettings()
+                        # Update the GUI elements
+                        self.lookup_action('eqenabled').set_state(GLib.Variant('b', status))
+                        for i in range(num_ladspa_controls):
+                            self.scales[i].set_value(float(ladspa_controls[i]))
+                            self.scalevalues[i].set_markup('<small>' + str(float(ladspa_controls[i])) + '\ndB</small>')
+                    else:
+                        print(f"Error switching output: {result.stderr}")
+                except Exception as e:
+                    print(f"Error switching equalizer output: {e}")
+            else:
+                print("Using default output")
 
     @Gtk.Template.Callback()
     def on_refresh_outputs(self, widget):

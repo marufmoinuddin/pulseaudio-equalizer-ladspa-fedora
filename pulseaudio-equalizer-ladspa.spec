@@ -1,13 +1,12 @@
 %global debug_package %{nil}
 
 Name:           pulseaudio-equalizer-ladspa
-Version:        4.0.1
-Release:        1%{?dist}
-Summary:        A 15-band equalizer for PulseAudio/PipeWire
+Version:        2.7.7
+Release:        1.pipewire%{?dist}
+Summary:        A 15-band equalizer for PulseAudio/PipeWire (PipeWire-optimized)
 License:        GPL-3.0-or-later
 URL:            https://github.com/pulseaudio-equalizer-ladspa/equalizer
-Source0:        https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz#/%{name}-%{version}.tar.gz
-Patch0:         pipewire-compatibility.patch
+Source0:        pulseaudio-equalizer-ladspa-2.7.5-pipewire.tar.gz
 
 BuildArch:      noarch
 
@@ -41,7 +40,7 @@ GTK3 and PyGObject, allowing real-time audio equalization through PulseAudio's
 LADSPA sink module.
 
 %prep
-%autosetup -n equalizer-3.0.2 -p1
+%autosetup -n pulseaudio-equalizer-ladspa-2.7.5-pipewire
 
 %build
 %meson
@@ -62,14 +61,9 @@ LADSPA sink module.
 %{python3_sitelib}/pulseeq/
 
 %changelog
-* Mon Aug 25 2025 Maruf <maruf@example.com> - 4.0.1-1
-- PipeWire compatibility branch
-- Updated dependencies to use pipewire-pulseaudio instead of pulseaudio
-- Modified description to reflect PipeWire support
-- Tested with PipeWire's PulseAudio compatibility layer on Fedora 42
-
-* Tue Aug 19 2025 Maruf <maruf@example.com> - 4.0.1-1
-- Test release for CI/CD pipeline validation
-- Updated packaging to use remote source URL
-- Fixed version alignment for automated builds
-- Verified compatibility with Fedora 42
+%changelog
+* Thu Jan 09 2025 maruf <maruf@example.com> - 2.7.5-1.pipewire
+- Add GUI output device switching functionality
+- Enhanced PipeWire compatibility with real-time device switching
+- Improved preset discovery and loading capabilities
+- Added update-output command for dynamic sink switching
