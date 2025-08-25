@@ -29,6 +29,8 @@ output_selected = 0
 num_profiles = 0
 profiles = []
 profile_sinks = []  # New list to store sink names
+# Remember the last selected output sink so we can restore it after changes
+last_selected_sink = None
 
 def GetSettings():
     global rawdata
@@ -106,6 +108,17 @@ def ApplySettings():
 
     os.system('pulseaudio-equalizer interface.applysettings')
 
+    # Re-apply last selected output sink to prevent auto-switching
+    try:
+        global last_selected_sink
+        if last_selected_sink and last_selected_sink != "default":
+            # Ensure sink still exists
+            chk = subprocess.run("pactl list sinks short | awk '{print $2}'", shell=True, capture_output=True, text=True)
+            if chk.returncode == 0 and last_selected_sink in chk.stdout.split():
+                subprocess.run(f"pulseaudio-equalizer update-output {last_selected_sink}", shell=True)
+    except Exception as e:
+        print(f"Warning: could not re-apply output sink: {e}")
+
 def GetOutputDevices():
     """Get available output devices using pactl"""
     global profiles
@@ -178,6 +191,16 @@ def ApplySettings():
     f.close()
 
     os.system('pulseaudio-equalizer interface.applysettings')
+
+    # Re-apply last selected output sink to prevent auto-switching
+    try:
+        global last_selected_sink
+        if last_selected_sink and last_selected_sink != "default":
+            chk = subprocess.run("pactl list sinks short | awk '{print $2}'", shell=True, capture_output=True, text=True)
+            if chk.returncode == 0 and last_selected_sink in chk.stdout.split():
+                subprocess.run(f"pulseaudio-equalizer update-output {last_selected_sink}", shell=True)
+    except Exception as e:
+        print(f"Warning: could not re-apply output sink: {e}")
 
 class FrequencyLabel(Gtk.Label):
     def __init__(self, frequency=None):
@@ -278,6 +301,7 @@ class Equalizer(Gtk.ApplicationWindow):
             preset = str(rawdata[4])
             clearpreset = 1
             self.presetsbox.get_child().set_text(preset)
+            # Apply settings and then ensure the selected output is retained
             ApplySettings()
 
             self.lookup_action('save').set_enabled(False)
@@ -290,18 +314,20 @@ class Equalizer(Gtk.ApplicationWindow):
         global num_profiles
         global profiles
         global profile_sinks
+        global last_selected_sink
+
         output_selected = widget.get_active()
-        
+
         if output_selected != -1 and output_selected < num_profiles:
             selected_profile = profiles[output_selected]
             selected_sink = profile_sinks[output_selected] if output_selected < len(profile_sinks) else "default"
-            
-            print(f'Output device changed to: {selected_profile} [sink: {selected_sink}]')
-            
-            # Switch the equalizer to the new output device
+
+            print(f"Output device changed to: {selected_profile} [sink: {selected_sink}]")
+
+            # Store choice and switch the equalizer to the new output device
+            last_selected_sink = selected_sink
             if selected_sink != "default":
                 try:
-                    import subprocess
                     result = subprocess.run(
                         f"pulseaudio-equalizer update-output {selected_sink}",
                         shell=True, capture_output=True, text=True
@@ -332,8 +358,15 @@ class Equalizer(Gtk.ApplicationWindow):
         for profile in profiles:
             self.outputbox.append_text(profile)
         
-        # Set default selection
-        if num_profiles > 0:
+        # Prefer previously selected sink if still available
+        global last_selected_sink
+        active_set = False
+        if last_selected_sink and last_selected_sink in profile_sinks:
+            idx = profile_sinks.index(last_selected_sink)
+            if idx < num_profiles:
+                self.outputbox.set_active(idx)
+                active_set = True
+        if not active_set and num_profiles > 0:
             self.outputbox.set_active(0)
         
         print(f"Refreshed output devices: {num_profiles} devices found")
@@ -473,7 +506,11 @@ class Equalizer(Gtk.ApplicationWindow):
         GetOutputDevices()
         for profile in profiles:
             self.outputbox.append_text(profile)
-        if num_profiles > 0:
+        # Prefer last selected sink on startup if available
+        global last_selected_sink
+        if last_selected_sink and last_selected_sink in profile_sinks:
+            self.outputbox.set_active(profile_sinks.index(last_selected_sink))
+        elif num_profiles > 0:
             self.outputbox.set_active(0)
 
         self.show()
