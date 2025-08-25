@@ -5,7 +5,7 @@ set -e
 
 # Package information
 PACKAGE_NAME="pulseaudio-equalizer-ladspa"
-VERSION="2.8.0"
+VERSION="2.8.1"
 SPEC_FILE="${PACKAGE_NAME}.spec"
 
 # Colors for output

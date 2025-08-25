@@ -1,5 +1,5 @@
 project('pulseaudio-equalizer-ladspa', 'c',
-  version: '2.8.0-pipewire',
+  version: '2.8.1-pipewire',
   license: 'GPL-3.0'
 )
 
