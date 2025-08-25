@@ -1,12 +1,12 @@
 %global debug_package %{nil}
 
 Name:           pulseaudio-equalizer-ladspa
-Version:        2.7.9
+Version:        2.8.0
 Release:        1.pipewire%{?dist}
 Summary:        A 15-band equalizer for PulseAudio/PipeWire (PipeWire-optimized)
 License:        GPL-3.0-or-later
 URL:            https://github.com/pulseaudio-equalizer-ladspa/equalizer
-Source0:        pulseaudio-equalizer-ladspa-2.7.9.tar.gz
+Source0:        pulseaudio-equalizer-ladspa-2.8.0.tar.gz
 
 BuildArch:      noarch
 
@@ -40,7 +40,7 @@ GTK3 and PyGObject, allowing real-time audio equalization through PulseAudio's
 LADSPA sink module.
 
 %prep
-%autosetup -n pulseaudio-equalizer-ladspa-2.7.9-pipewire
+%autosetup -n pulseaudio-equalizer-ladspa-2.8.0-pipewire
 
 %build
 %meson
@@ -61,7 +61,15 @@ LADSPA sink module.
 %{python3_sitelib}/pulseeq/
 
 %changelog
-%changelog
+* Mon Aug 26 2024 maruf <maruf@example.com> - 2.8.0-1.pipewire
+- Comprehensive code optimization and cleanup
+- Fix global variable scope issue in GUI initialization
+- Fix GUI initialization to select RUNNING sink device in dropdown
+- Fix execute permissions for installed binaries
+- Improve output device selection and persistence
+- Enhanced GUI output device switching functionality
+- Multiple bug fixes and stability improvements
+
 * Thu Jan 09 2025 maruf <maruf@example.com> - 2.7.5-1.pipewire
 - Add GUI output device switching functionality
 - Enhanced PipeWire compatibility with real-time device switching

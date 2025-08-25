@@ -5,7 +5,7 @@ set -e
 
 # Package information
 PACKAGE_NAME="pulseaudio-equalizer-ladspa"
-VERSION="2.7.9"
+VERSION="2.8.0"
 SPEC_FILE="${PACKAGE_NAME}.spec"
 
 # Colors for output
@@ -40,14 +40,13 @@ rpmdev-setuptree
 echo -e "${YELLOW}Copying spec file...${NC}"
 cp "$SPEC_FILE" ~/rpmbuild/SPECS/
 
-# Download source if not present
+# Create source archive from current repository
 SOURCE_FILE="${PACKAGE_NAME}-${VERSION}.tar.gz"
 if [ ! -f ~/rpmbuild/SOURCES/"$SOURCE_FILE" ]; then
-    echo -e "${YELLOW}Downloading source...${NC}"
-    cd ~/rpmbuild/SOURCES/
-    # Use the actual upstream version (3.0.2) but save as our package version
-    wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz" \
-         -O "$SOURCE_FILE"
+    echo -e "${YELLOW}Creating source archive from current repository...${NC}"
+    cd "$(dirname "$0")"
+    git archive --format=tar.gz --prefix="${PACKAGE_NAME}-${VERSION}-pipewire/" \
+                -o ~/rpmbuild/SOURCES/"$SOURCE_FILE" HEAD
     cd - > /dev/null
 else
     echo -e "${GREEN}Source file already exists${NC}"
