@@ -1,0 +1,15 @@
+[Unit]
+Description=PulseAudio Equalizer LADSPA Auto-loader
+After=pipewire-pulse.service
+Wants=pipewire-pulse.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@bindir@/pulseaudio-equalizer enable
+ExecStop=@bindir@/pulseaudio-equalizer disable
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=pipewire-pulse.service

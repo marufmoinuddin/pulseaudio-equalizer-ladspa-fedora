@@ -13,6 +13,7 @@ appid = 'com.github.pulseaudio-equalizer-ladspa.Equalizer'
 prefix = get_option('prefix')
 bindir = get_option('bindir')
 datadir = get_option('datadir')
+libdir = get_option('libdir')
 pythondir = python.get_path('purelib')
 
 pkgdatadir = join_paths(datadir, meson.project_name())

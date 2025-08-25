@@ -1,0 +1,46 @@
+#!/bin/bash
+# PulseAudio Equalizer LADSPA Auto-start Setup Script
+
+echo "PulseAudio Equalizer LADSPA Auto-start Setup"
+echo "============================================="
+
+# Check if systemd user service exists
+if [ ! -f "/usr/lib/systemd/user/pulseaudio-equalizer.service" ]; then
+    echo "Error: systemd service not found. Please install the package first."
+    exit 1
+fi
+
+case "$1" in
+    "enable")
+        echo "Enabling auto-start for PulseAudio Equalizer LADSPA..."
+        systemctl --user daemon-reload
+        systemctl --user enable pulseaudio-equalizer.service
+        echo "Auto-start enabled. The equalizer will load automatically on next login."
+        echo "To start it now, run: systemctl --user start pulseaudio-equalizer.service"
+        ;;
+    "disable")
+        echo "Disabling auto-start for PulseAudio Equalizer LADSPA..."
+        systemctl --user disable pulseaudio-equalizer.service
+        systemctl --user stop pulseaudio-equalizer.service
+        echo "Auto-start disabled."
+        ;;
+    "status")
+        echo "Auto-start status:"
+        systemctl --user is-enabled pulseaudio-equalizer.service 2>/dev/null || echo "disabled"
+        echo ""
+        echo "Current status:"
+        systemctl --user is-active pulseaudio-equalizer.service 2>/dev/null || echo "inactive"
+        ;;
+    *)
+        echo "Usage: $0 {enable|disable|status}"
+        echo ""
+        echo "Commands:"
+        echo "  enable  - Enable auto-start of LADSPA equalizer"
+        echo "  disable - Disable auto-start of LADSPA equalizer"
+        echo "  status  - Show current auto-start status"
+        echo ""
+        echo "After enabling, the equalizer will automatically load when you log in."
+        echo "The equalizer will be set as the default audio sink."
+        exit 1
+        ;;
+esac

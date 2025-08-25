@@ -34,9 +34,33 @@ chmod +x build-fedora-rpm.sh
 # Install the package
 sudo dnf install ~/rpmbuild/RPMS/noarch/pulseaudio-equalizer-ladspa-2.8.1-1.pipewire.*.rpm
 
+# Enable auto-start (optional)
+pulseaudio-equalizer-autostart enable
+
 # Run the application
 pulseaudio-equalizer-gtk
 ```
+
+## 🚀 Auto-Start Setup
+
+To automatically load the equalizer on login:
+
+```bash
+# Enable auto-start
+pulseaudio-equalizer-autostart enable
+
+# Disable auto-start
+pulseaudio-equalizer-autostart disable
+
+# Check status
+pulseaudio-equalizer-autostart status
+```
+
+When auto-start is enabled, the LADSPA equalizer will:
+- Automatically load when you log in
+- Be set as the default audio sink
+- Persist across reboots
+- Work with PipeWire-Pulse seamlessly
 
 ## 📋 Dependencies
 

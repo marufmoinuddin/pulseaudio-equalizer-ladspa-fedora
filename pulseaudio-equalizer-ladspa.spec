@@ -24,6 +24,7 @@ Requires:       pipewire-pulseaudio
 Requires:       python3
 Requires:       python3-gobject
 Requires:       ladspa-swh-plugins
+Requires:       systemd
 
 %description
 A LADSPA based multiband equalizer approach for getting better sound out of 
@@ -56,12 +57,21 @@ LADSPA sink module.
 %doc README.md
 %{_bindir}/pulseaudio-equalizer
 %{_bindir}/pulseaudio-equalizer-gtk
+%{_bindir}/pulseaudio-equalizer-autostart
 %{_datadir}/%{name}/
 %{_datadir}/applications/com.github.pulseaudio-equalizer-ladspa.Equalizer.desktop
+%{_userunitdir}/pulseaudio-equalizer.service
 %{python3_sitelib}/pulseeq/
 
+%post
+%systemd_user_post pulseaudio-equalizer.service
+
+%preun
+%systemd_user_preun pulseaudio-equalizer.service
+
 %changelog
-* Mon Aug 26 2024 maruf <maruf@example.com> - 2.8.1-1.pipewire
+* Mon Aug 26 2025 maruf <maruf@example.com> - 2.8.1-1.pipewire
+- Added systemd auto-start service for LADSPA equalizer
 - Fix refresh output sources button to persist current selection
 - Prevent reset to laptop output when refreshing devices
 - Improved device selection persistence for HDMI and Bluetooth outputs
@@ -76,7 +86,7 @@ LADSPA sink module.
 - Enhanced GUI output device switching functionality
 - Multiple bug fixes and stability improvements
 
-* Thu Jan 09 2025 maruf <maruf@example.com> - 2.7.5-1.pipewire
+* Thu Jan 09 2024 maruf <maruf@example.com> - 2.7.5-1.pipewire
 - Add GUI output device switching functionality
 - Enhanced PipeWire compatibility with real-time device switching
 - Improved preset discovery and loading capabilities

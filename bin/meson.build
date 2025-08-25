@@ -22,3 +22,12 @@ configure_file(
     install_mode: 'rwxr-xr-x',
 )
 
+configure_file(
+    input: 'pulseaudio-equalizer-autostart.in',
+    output: 'pulseaudio-equalizer-autostart',
+    configuration: bin_conf,
+    install: true,
+    install_dir: bindir,
+    install_mode: 'rwxr-xr-x',
+)
+
