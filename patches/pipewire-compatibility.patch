@@ -1,0 +1,93 @@
+--- a/bin/pulseaudio-equalizer.in
++++ b/bin/pulseaudio-equalizer.in
+@@ -1,5 +1,89 @@
+ #!/bin/bash
+ 
++# PipeWire-Compatible PulseAudio Equalizer Wrapper
++# This script provides compatibility between the original pulseaudio-equalizer
++# and PipeWire's PulseAudio compatibility layer
++
++# Check if we're running with PipeWire
++if systemctl --user is-active --quiet pipewire-pulse; then
++    PIPEWIRE_MODE=1
++    echo "Detected PipeWire with PulseAudio compatibility"
++else
++    PIPEWIRE_MODE=0
++fi
++
++# For PipeWire, use our working script-based approach
++if [ "$PIPEWIRE_MODE" = "1" ]; then
++    SCRIPT_DIR="/usr/share/pulseaudio-equalizer-ladspa"
++    
++    case "$1" in
++        "enable")
++            echo "Enabling LADSPA equalizer with PipeWire..."
++            # Use pactl directly instead of the complex original script
++            pactl load-module module-ladspa-sink \
++                sink_name=ladspa_output.mbeq_1197.mbeq \
++                sink_master="$(pactl get-default-sink)" \
++                plugin=mbeq_1197 \
++                label=mbeq \
++                control="-3.0,2.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0"
++            pactl set-default-sink ladspa_output.mbeq_1197.mbeq
++            echo "LADSPA equalizer enabled"
++            ;;
++        "disable")
++            echo "Disabling LADSPA equalizer..."
++            MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1)
++            if [ ! -z "$MODULE_ID" ]; then
++                pactl unload-module $MODULE_ID
++                # Reset to hardware sink
++                DEFAULT_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)
++                pactl set-default-sink "$DEFAULT_SINK"
++                echo "LADSPA equalizer disabled"
++            else
++                echo "No LADSPA equalizer module found"
++            fi
++            ;;
++        "toggle")
++            echo "Toggling LADSPA equalizer..."
++            if pactl list sinks short | grep -q "ladspa_output"; then
++                "$0" disable
++            else
++                "$0" enable
++            fi
++            ;;
++        "status")
++            echo "PipeWire LADSPA Equalizer Status:"
++            echo "Default sink: $(pactl get-default-sink)"
++            echo ""
++            echo "Available sinks:"
++            pactl list sinks short
++            echo ""
++            echo "LADSPA modules:"
++            pactl list modules short | grep ladspa || echo "No LADSPA modules loaded"
++            ;;
++        "debug")
++            echo "PipeWire LADSPA Equalizer Debug Info:"
++            echo "Audio server: $(pactl info | grep 'Server Name')"
++            echo ""
++            echo "Available sinks:"
++            pactl list sinks short
++            echo ""
++            echo "LADSPA modules:"
++            pactl list modules short | grep ladspa || echo "No LADSPA modules loaded"
++            ;;
++        *)
++            echo "PipeWire-Compatible PulseAudio Equalizer 4.0-pipewire"
++            echo ""
++            echo "Usage: $0 {enable|disable|toggle|status|debug}"
++            echo ""
++            echo "  enable     - Load LADSPA equalizer"
++            echo "  disable    - Unload LADSPA equalizer"  
++            echo "  toggle     - Toggle equalizer on/off"
++            echo "  status     - Show current status"
++            echo "  debug      - Show debug information"
++            ;;
++    esac
++    exit 0
++fi
++
+ # PulseAudio LADSPA Equalizer - support script
+ # Author: Conn O'Griofa <connogriofa AT gmail DOT com>
+ #

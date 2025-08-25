@@ -7,6 +7,7 @@ Summary:        A 15-band equalizer for PulseAudio/PipeWire
 License:        GPL-3.0-or-later
 URL:            https://github.com/pulseaudio-equalizer-ladspa/equalizer
 Source0:        https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz#/%{name}-%{version}.tar.gz
+Patch0:         pipewire-compatibility.patch
 
 BuildArch:      noarch
 
@@ -40,7 +41,7 @@ GTK3 and PyGObject, allowing real-time audio equalization through PulseAudio's
 LADSPA sink module.
 
 %prep
-%autosetup -n equalizer-3.0.2
+%autosetup -n equalizer-3.0.2 -p1
 
 %build
 %meson
