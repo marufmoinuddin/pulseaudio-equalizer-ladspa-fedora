@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # PulseAudio Equalizer (PyGTK Interface)
@@ -6,29 +6,27 @@
 # Intended for use in conjunction with pulseaudio-equalizer script
 #
 # Author: Conn O'Griofa <connogriofa AT gmail DOT com>
-# Version: (see '/usr/pulseaudio-equalizer' script)
+# Version: 2.7.9-pipewire
 #
+
+import os
+import sys
+import subprocess
+import re
+import time
 
 import gi
 gi.check_version('3.30')
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gio, GLib
 
-import os, sys
-import subprocess
-import re
-
 from pulseeq.constants import *
 
 # Global variables for output management
-global output_selected
-global num_profiles
-global profiles
-global profile_sinks  # Store actual sink names corresponding to profiles
 output_selected = 0
 num_profiles = 0
 profiles = []
-profile_sinks = []  # New list to store sink names
+profile_sinks = []  # Store actual sink names corresponding to profiles
 last_selected_sink = None  # Track the last user-selected output device
 
 def GetSettings():
@@ -52,14 +50,12 @@ def GetSettings():
 
     os.system('pulseaudio-equalizer interface.getsettings')
 
-    f = open(CONFIG_FILE, 'r')
-    rawdata = f.read().split('\n')
-    f.close()
+    with open(CONFIG_FILE, 'r') as f:
+        rawdata = f.read().split('\n')
 
     rawpresets = {}
-    f = open(PRESETS_FILE, 'r')
-    rawpresets = f.read().split('\n')
-    f.close()
+    with open(PRESETS_FILE, 'r') as f:
+        rawpresets = f.read().split('\n')
     del rawpresets[len(rawpresets) - 1]
 
     ladspa_filename = str(rawdata[0])
@@ -87,7 +83,6 @@ def InitializeCurrentOutput():
     global last_selected_sink
     
     try:
-        import subprocess
         # First try to get the current equalizer master sink if equalizer is already running
         result = subprocess.run(
             "pactl list modules | grep -A 20 'module-ladspa-sink' | grep 'master=' | cut -d'=' -f2 | cut -d' ' -f1",
@@ -131,28 +126,19 @@ def InitializeCurrentOutput():
 
 
 def ApplySettings():
+    """Apply equalizer settings and restore output device"""
     global last_selected_sink
     print('Applying settings...')
-    f = open(CONFIG_FILE, 'w')
-    del rawdata[:]
-    rawdata.append(str(ladspa_filename))
-    rawdata.append(str(ladspa_name))
-    rawdata.append(str(ladspa_label))
-    rawdata.append(str(preamp))
-    rawdata.append(str(preset))
-    rawdata.append(str(status))
-    rawdata.append(str(persistence))
-    for i in range(2):
-        rawdata.append(str(ranges[i]))
-    rawdata.append(str(num_ladspa_controls))
-    for i in range(num_ladspa_controls):
-        rawdata.append(str(ladspa_controls[i]))
-    for i in range(num_ladspa_controls):
-        rawdata.append(str(ladspa_inputs[i]))
-
-    for i in rawdata:
-        f.write(str(i) + '\n')
-    f.close()
+    
+    # Write settings to config file
+    with open(CONFIG_FILE, 'w') as f:
+        data = [
+            str(ladspa_filename), str(ladspa_name), str(ladspa_label),
+            str(preamp), str(preset), str(status), str(persistence),
+            *map(str, ranges), str(num_ladspa_controls),
+            *map(str, ladspa_controls), *map(str, ladspa_inputs)
+        ]
+        f.write('\n'.join(data) + '\n')
 
     # Apply the equalizer settings
     os.system('pulseaudio-equalizer interface.applysettings')
@@ -161,8 +147,6 @@ def ApplySettings():
     if last_selected_sink and last_selected_sink != "default":
         print(f'Restoring output to: {last_selected_sink}')
         try:
-            import subprocess
-            import time
             # Small delay to ensure the LADSPA module has been recreated
             time.sleep(0.5)
             result = subprocess.run(
@@ -174,14 +158,11 @@ def ApplySettings():
             else:
                 print(f"Warning: Could not restore output device: {result.stderr}")
                 # Try alternative approach with pactl directly
-                try:
-                    subprocess.run(
-                        f"pactl set-default-sink {last_selected_sink}",
-                        shell=True, capture_output=True, text=True
-                    )
-                    print(f"Fallback: Set default sink to {last_selected_sink}")
-                except:
-                    pass
+                subprocess.run(
+                    f"pactl set-default-sink {last_selected_sink}",
+                    shell=True, capture_output=True, text=True
+                )
+                print(f"Fallback: Set default sink to {last_selected_sink}")
         except Exception as e:
             print(f"Warning: Error restoring output device: {e}")
     else:
@@ -362,7 +343,6 @@ class Equalizer(Gtk.ApplicationWindow):
             # Switch the equalizer to the new output device
             if selected_sink != "default":
                 try:
-                    import subprocess
                     result = subprocess.run(
                         f"pulseaudio-equalizer update-output {selected_sink}",
                         shell=True, capture_output=True, text=True
@@ -419,23 +399,14 @@ class Equalizer(Gtk.ApplicationWindow):
         if preset == '' or presetmatch == 1:
             print('Invalid preset name')
         else:
-            f = open(os.path.join(USER_PRESET_DIR, preset + '.preset'), 'w')
-
-            del rawdata[:]
-            rawdata.append(str(ladspa_filename))
-            rawdata.append(str(ladspa_name))
-            rawdata.append(str(ladspa_label))
-            rawdata.append('')
-            rawdata.append(str(preset))
-            rawdata.append(str(num_ladspa_controls))
-            for i in range(num_ladspa_controls):
-                rawdata.append(str(ladspa_controls[i]))
-            for i in range(num_ladspa_controls):
-                rawdata.append(str(ladspa_inputs[i]))
-
-            for i in rawdata:
-                f.write(str(i) + '\n')
-            f.close()
+            # Write preset data to file
+            with open(os.path.join(USER_PRESET_DIR, preset + '.preset'), 'w') as f:
+                data = [
+                    str(ladspa_filename), str(ladspa_name), str(ladspa_label),
+                    '', str(preset), str(num_ladspa_controls),
+                    *map(str, ladspa_controls), *map(str, ladspa_inputs)
+                ]
+                f.write('\n'.join(data) + '\n')
 
             # Clear preset list from ComboBox
             self.presetsbox.remove_all()
@@ -552,7 +523,6 @@ class Equalizer(Gtk.ApplicationWindow):
                             break
                     else:
                         # If the detected sink isn't in our list, find RUNNING sink directly
-                        import subprocess
                         result = subprocess.run(
                             "pactl list sinks short | grep -v ladspa",
                             shell=True, capture_output=True, text=True
