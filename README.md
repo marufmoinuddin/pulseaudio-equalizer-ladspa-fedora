@@ -1,41 +1,38 @@
-# pulseaudio-equalizer-ladspa-fedora
+# PulseAudio Equalizer LADSPA - PipeWire Compatible
 
-**Fedora 42 RPM Package for PulseAudio Equalizer LADSPA**
+**A 15-band equalizer for PulseAudio/PipeWire with enhanced PipeWire compatibility**
 
-This repository contains the Fedora 42 RPM package conversion of `pulseaudio-equalizer-ladspa`, originally converted from the Arch Linux package.
+This repository contains a PipeWire-optimized version of the PulseAudio Equalizer LADSPA with improved output device persistence and enhanced compatibility.
 
-## 🎵 About
+## 🎵 Features
 
-A LADSPA based multiband equalizer approach for getting better sound out of PulseAudio. This equalizer is more potent than the deprecated optional one from PulseAudio.
-
-**Features:**
-- 15-band graphic equalizer interface
-- Built with GTK3 and PyGObject 
-- Real-time audio equalization through PulseAudio's LADSPA sink module
-- 26+ built-in audio presets (Rock, Classical, Bass Boost, etc.)
-- Desktop integration with application launcher
+- **15-band graphic equalizer** with real-time audio processing
+- **PipeWire compatibility** with enhanced output device switching
+- **GTK3 interface** built with PyGObject
+- **26+ built-in audio presets** (Rock, Classical, Bass Boost, etc.)
+- **Persistent output selection** - maintains HDMI/Bluetooth selection
+- **Desktop integration** with application launcher
 
 ## 📦 Package Information
 
-- **Name**: pulseaudio-equalizer-ladspa
-- **Version**: 3.0.2
+- **Version**: 2.8.1-pipewire
 - **Architecture**: noarch (Python/shell scripts)
 - **License**: GPL-3.0-or-later
-- **Target**: Fedora 42
+- **Compatible with**: PulseAudio and PipeWire (with PulseAudio compatibility)
 
-## 🚀 Quick Build & Install
+## 🚀 Quick Install
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/marufmoinuddin/pulseaudio-equalizer-ladspa-fedora.git
 cd pulseaudio-equalizer-ladspa-fedora
 
-# Build the RPM package (automated)
+# Build the RPM package
 chmod +x build-fedora-rpm.sh
 ./build-fedora-rpm.sh
 
 # Install the package
-sudo dnf install ~/rpmbuild/RPMS/noarch/pulseaudio-equalizer-ladspa-3.0.2-1.fc42.noarch.rpm
+sudo dnf install ~/rpmbuild/RPMS/noarch/pulseaudio-equalizer-ladspa-2.8.1-1.pipewire.*.rpm
 
 # Run the application
 pulseaudio-equalizer-gtk
@@ -43,12 +40,12 @@ pulseaudio-equalizer-gtk
 
 ## 📋 Dependencies
 
-### Runtime Dependencies
+### Runtime Requirements
 - `bash` - Shell scripting
 - `bc` - Basic calculator for audio math
 - `glib2` - GLib library
 - `gtk3` - GTK3 GUI toolkit
-- `pulseaudio` - PulseAudio sound server
+- `pipewire-pulseaudio` - PipeWire with PulseAudio compatibility
 - `python3` - Python 3 interpreter
 - `python3-gobject` - Python GObject bindings
 - `ladspa-swh-plugins` - SWH LADSPA plugins collection
@@ -60,126 +57,45 @@ pulseaudio-equalizer-gtk
 - `python3-devel` - Python development headers
 - `python3-setuptools` - Python setuptools
 
-## 📁 Repository Structure
+## ✨ Recent Improvements (v2.8.1)
 
-```
-├── pulseaudio-equalizer-ladspa.spec  # RPM spec file
-├── build-fedora-rpm.sh               # Automated build script
-├── README-fedora.md                  # Detailed Fedora documentation
-├── SUMMARY.md                        # Conversion summary
-├── PKGBUILD                          # Original Arch Linux package
-├── LICENSE                           # GPL-3.0 license
-└── share/                            # Shared data files
-```
-
-## 📖 Documentation
-
-- **[README-fedora.md](README-fedora.md)** - Comprehensive Fedora packaging guide
-- **[SUMMARY.md](SUMMARY.md)** - Detailed conversion summary from Arch to Fedora
-- **[CICD.md](CICD.md)** - Complete CI/CD pipeline documentation
-- **[MANUAL-RELEASE.md](MANUAL-RELEASE.md)** - Manual release workflow guide
-- **[VERSION-MANAGEMENT.md](VERSION-MANAGEMENT.md)** - Version alignment and management
-
-## 🚀 CI/CD & Release Management
-
-This repository includes comprehensive automation:
-
-### 🔄 Automated Workflows
-- **Development Build** - Creates test RPMs on every push
-- **Continuous Integration** - Quality checks and multi-version testing
-- **Release Pipeline** - Automated releases on git tags
-- **Manual Release** - On-demand release creation with custom versions
-
-### 📦 Manual Release Creation
-Create custom releases without git tag pushes:
-
-1. Go to **Actions** → **Manual Build and Release**
-2. Click **Run workflow**
-3. Specify your parameters:
-   ```
-   Release Tag: v4.0.3
-   Package Version: 4.0.3
-   Upstream Version: 3.0.2
-   Release Title: Custom Release v4.0.3
-   ```
-4. Click **Run workflow** to build and publish
-
-See **[MANUAL-RELEASE.md](MANUAL-RELEASE.md)** for complete usage guide.
-
-### 🎯 Quick Release Examples
-```bash
-# Standard release
-Release Tag: v4.0.3, Package: 4.0.3, Upstream: 3.0.2
-
-# Beta release  
-Release Tag: v4.1.0-beta1, Package: 4.1.0.beta1, Upstream: 3.0.2
-
-# Hotfix release
-Release Tag: v4.0.2-hotfix, Package: 4.0.2, Upstream: 3.0.2
-```
-
-## 🔧 Manual Build Process
-
-If you prefer to build manually:
-
-```bash
-# Set up RPM build environment
-rpmdev-setuptree
-
-# Copy spec file
-cp pulseaudio-equalizer-ladspa.spec ~/rpmbuild/SPECS/
-
-# Download source
-cd ~/rpmbuild/SOURCES/
-wget https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz \
-     -O pulseaudio-equalizer-ladspa-3.0.2.tar.gz
-
-# Install build dependencies
-sudo dnf builddep ~/rpmbuild/SPECS/pulseaudio-equalizer-ladspa.spec
-
-# Build package
-cd ~/rpmbuild/SPECS/
-rpmbuild -ba pulseaudio-equalizer-ladspa.spec
-```
+- **Fixed refresh output sources button** - now persists current selection instead of resetting to laptop
+- **Enhanced device persistence** - maintains HDMI and Bluetooth output selection
+- **Improved PipeWire compatibility** - better detection of running audio devices
+- **Better fallback handling** - smart device selection when devices are disconnected
+- **Comprehensive code optimization** and bug fixes
 
 ## 🎯 Package Contents
 
-After installation, you'll have:
-
+After installation:
 - `/usr/bin/pulseaudio-equalizer` - Command-line interface
 - `/usr/bin/pulseaudio-equalizer-gtk` - GTK GUI application  
 - `/usr/share/applications/` - Desktop application entry
 - `/usr/share/pulseaudio-equalizer-ladspa/presets/` - Audio presets
-- `/usr/lib/python3.13/site-packages/pulseeq/` - Python modules
-
-## ⚠️ Important Notes
-
-- **PulseAudio Required**: This package requires actual PulseAudio, not PipeWire's compatibility layer
-- **LADSPA Plugins**: The `ladspa-swh-plugins` package is essential for audio processing
-- **Python 3.13**: Built for Python 3.13 (Fedora 42)
+- `/usr/lib/python3.*/site-packages/pulseeq/` - Python modules
 
 ## 🐛 Troubleshooting
 
-If you encounter issues:
+**Build Issues:**
+- Ensure all BuildRequires packages are installed: `sudo dnf builddep pulseaudio-equalizer-ladspa.spec`
 
-1. **Build Failures**: Ensure all BuildRequires packages are installed
-2. **Runtime Issues**: Verify PulseAudio is running and SWH plugins are available
-3. **Permission Issues**: Don't run the equalizer as root
+**Runtime Issues:**
+- Verify PipeWire is running: `systemctl --user status pipewire pipewire-pulse`
+- Check SWH plugins are installed: `dnf list ladspa-swh-plugins`
+- Don't run the equalizer as root
+
+**Output Device Issues:**
+- Use the refresh button to update device list
+- The equalizer now properly persists HDMI/Bluetooth selections
 
 ## 🤝 Contributing
 
-This is a packaging repository. For upstream issues with the equalizer itself, please visit:
-- **Upstream Project**: https://github.com/pulseaudio-equalizer-ladspa/equalizer
-- **Original Arch Package**: https://gitlab.archlinux.org/archlinux/packaging/packages/pulseaudio-equalizer-ladspa
+For upstream issues with the equalizer itself, visit the [original project](https://github.com/pulseaudio-equalizer-ladspa/equalizer).
 
 ## 📜 License
 
 GPL-3.0-or-later (same as upstream project)
 
-## 🏷️ Tags
-
-`fedora` `rpm` `pulseaudio` `equalizer` `ladspa` `audio` `gtk3` `python` `packaging`
-
 ---
 
-**Converted from Arch Linux to Fedora 42 RPM on August 19, 2025**
+**PipeWire-optimized version - Enhanced for modern Linux audio systems**
