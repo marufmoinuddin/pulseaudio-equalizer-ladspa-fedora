@@ -10,6 +10,7 @@ configure_file(
     configuration: bin_conf,
     install: true,
     install_dir: bindir,
+    install_mode: 'rwxr-xr-x',
 )
 
 configure_file(
@@ -18,5 +19,6 @@ configure_file(
     configuration: bin_conf,
     install: true,
     install_dir: bindir,
+    install_mode: 'rwxr-xr-x',
 )
 
