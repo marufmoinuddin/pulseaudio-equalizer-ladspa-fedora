@@ -83,12 +83,12 @@ def GetSettings():
 
 
 def InitializeCurrentOutput():
-    """Initialize last_selected_sink by detecting current equalizer master"""
+    """Initialize last_selected_sink by detecting currently running non-ladspa sink"""
     global last_selected_sink
     
     try:
         import subprocess
-        # Get the current equalizer master sink instead of default sink
+        # First try to get the current equalizer master sink if equalizer is already running
         result = subprocess.run(
             "pactl list modules | grep -A 20 'module-ladspa-sink' | grep 'master=' | cut -d'=' -f2 | cut -d' ' -f1",
             shell=True, capture_output=True, text=True
@@ -97,19 +97,34 @@ def InitializeCurrentOutput():
             current_master = result.stdout.strip()
             last_selected_sink = current_master
             print(f"Initialized last_selected_sink to current equalizer master: {current_master}")
-        else:
-            # Fallback: get the first non-ladspa sink
-            result = subprocess.run(
-                "pactl list sinks short | grep -v ladspa | head -1 | cut -f2",
-                shell=True, capture_output=True, text=True
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                fallback_sink = result.stdout.strip()
+            return
+        
+        # If no equalizer is running, find the currently RUNNING non-ladspa sink
+        result = subprocess.run(
+            "pactl list sinks short | grep -v ladspa",
+            shell=True, capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            # Look for RUNNING sinks first
+            for line in result.stdout.strip().split('\n'):
+                if 'RUNNING' in line:
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        running_sink = parts[1]
+                        last_selected_sink = running_sink
+                        print(f"Initialized last_selected_sink to running sink: {running_sink}")
+                        return
+            
+            # If no RUNNING sink found, get the first available non-ladspa sink
+            first_line = result.stdout.strip().split('\n')[0]
+            parts = first_line.split('\t')
+            if len(parts) >= 2:
+                fallback_sink = parts[1]
                 last_selected_sink = fallback_sink
                 print(f"Initialized last_selected_sink to fallback sink: {fallback_sink}")
-            else:
-                print("Could not detect any suitable output device")
-                last_selected_sink = None
+        else:
+            print("Could not detect any suitable output device")
+            last_selected_sink = None
     except Exception as e:
         print(f"Error detecting current output device: {e}")
         last_selected_sink = None
