@@ -535,8 +535,44 @@ class Equalizer(Gtk.ApplicationWindow):
         GetOutputDevices()
         for profile in profiles:
             self.outputbox.append_text(profile)
+        
+        # Set the active device based on RUNNING sink detection
         if num_profiles > 0:
-            self.outputbox.set_active(0)
+            selected_index = 0  # Default to first device
+            
+            # If we detected a running sink during initialization, try to select it
+            if last_selected_sink and last_selected_sink != "default":
+                try:
+                    # Find which device corresponds to our detected running sink
+                    for i, sink_name in enumerate(profile_sinks):
+                        if sink_name == last_selected_sink:
+                            selected_index = i
+                            print(f"GUI: Selecting device {i} ({profiles[i]}) for running sink {last_selected_sink}")
+                            break
+                    else:
+                        # If the detected sink isn't in our list, find RUNNING sink directly
+                        import subprocess
+                        result = subprocess.run(
+                            "pactl list sinks short | grep -v ladspa",
+                            shell=True, capture_output=True, text=True
+                        )
+                        if result.returncode == 0:
+                            for line in result.stdout.strip().split('\n'):
+                                if 'RUNNING' in line:
+                                    parts = line.split('\t')
+                                    if len(parts) >= 2:
+                                        running_sink = parts[1]
+                                        for i, sink_name in enumerate(profile_sinks):
+                                            if sink_name == running_sink:
+                                                selected_index = i
+                                                last_selected_sink = running_sink
+                                                print(f"GUI: Found RUNNING sink {running_sink}, selecting device {i} ({profiles[i]})")
+                                                break
+                                        break
+                except Exception as e:
+                    print(f"Warning: Error selecting running device: {e}")
+            
+            self.outputbox.set_active(selected_index)
 
         self.show()
 
