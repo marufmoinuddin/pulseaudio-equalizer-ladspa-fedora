@@ -1,0 +1,2 @@
+option('python', type: 'string', value: 'python3', description: 'Python interpreter to use')
+option('purelib', type: 'string', value: '', description: 'Custom path for Python purelib installation')
