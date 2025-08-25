@@ -538,6 +538,7 @@ class Equalizer(Gtk.ApplicationWindow):
         
         # Set the active device based on RUNNING sink detection
         if num_profiles > 0:
+            global last_selected_sink
             selected_index = 0  # Default to first device
             
             # If we detected a running sink during initialization, try to select it
