@@ -6,7 +6,7 @@ install_data(appid + '.desktop',
 
 # Install systemd user service for auto-loading
 service_conf = configuration_data()
-service_conf.set('bindir', bindir)
+service_conf.set('bindir', join_paths(prefix, bindir))
 
 configure_file(
     input: 'pulseaudio-equalizer.service.in',
