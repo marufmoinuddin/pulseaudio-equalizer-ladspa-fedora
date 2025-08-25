@@ -78,16 +78,10 @@
             <property name="margin">10</property>
             <property name="spacing">10</property>
             <child>
-              <object class="GtkLabel">
-                <property name="visible">True</property>
-                <property name="label">Output Device:</property>
-                <property name="halign">start</property>
-              </object>
-            </child>
-            <child>
               <object class="GtkComboBoxText" id="outputbox">
                 <property name="visible">True</property>
                 <property name="hexpand">True</property>
+                <property name="width-request">300</property>
                 <signal name="changed" handler="on_outputbox" swapped="no"/>
               </object>
             </child>
@@ -97,7 +91,12 @@
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="tooltip-text">Refresh output devices</property>
-                <property name="label">🔄</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">True</property>
+                    <property name="icon-name">view-refresh-symbolic</property>
+                  </object>
+                </child>
                 <signal name="clicked" handler="on_refresh_outputs" swapped="no"/>
               </object>
             </child>
