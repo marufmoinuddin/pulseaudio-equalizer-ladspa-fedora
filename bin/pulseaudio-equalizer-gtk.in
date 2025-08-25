@@ -1,0 +1,22 @@
+#!/usr/bin/env python@python_major_ver@
+
+import sys, os
+from gi.repository import Gio
+
+resource = Gio.resource_load(
+    os.path.join('@pkgdatadir@', '@appid@.gresource'))
+Gio.Resource._register(resource)
+
+try:
+    __import__('importlib').import_module('pulseeq')
+except ImportError:
+    sys.path.append('@purelib_path@')
+    try:
+        __import__('importlib').import_module('pulseeq')
+    except ImportError:
+        raise
+
+from pulseeq import equalizer
+
+app = equalizer.Application()
+app.run(sys.argv)

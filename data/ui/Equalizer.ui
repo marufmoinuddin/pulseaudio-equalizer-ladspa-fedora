@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.20"/>
+  <template class="Equalizer" parent="GtkApplicationWindow">
+    <property name="icon-name">multimedia-volume-control</property>
+    <child type="titlebar">
+      <object class="GtkHeaderBar" id="headerbar">
+        <property name="visible">True</property>
+        <property name="show_close_button">True</property>
+        <property name="title">PipeWire LADSPA Equalizer</property>
+        <child>
+          <object class="GtkButton">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">win.save</property>
+            <property name="tooltip-text">Save current preset</property>
+            <style>
+              <class name="suggested-action"/>
+            </style>
+            <child>
+              <object class="GtkImage">
+                <property name="visible">True</property>
+                <property name="icon-name">document-save-symbolic</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkButton">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="action_name">win.remove</property>
+            <property name="tooltip-text">Remove current preset</property>
+            <style>
+              <class name="destructive-action"/>
+            </style>
+            <child>
+              <object class="GtkImage">
+                <property name="visible">True</property>
+                <property name="icon-name">user-trash-symbolic</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child type="title">
+          <object class="GtkComboBoxText" id="presetsbox">
+            <property name="visible">True</property>
+            <property name="has_entry">True</property>
+            <property name="valign">center</property>
+            <child internal-child="entry">
+              <object class="GtkEntry">
+              </object>
+            </child>
+            <signal name="changed" handler="on_presetsbox" swapped="no"/>
+          </object>
+        </child>
+        <child>
+          <object class="GtkSwitch">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="action_name">win.eqenabled</property>
+          </object>
+          <packing>
+            <property name="pack_type">end</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="orientation">horizontal</property>
+            <property name="margin">10</property>
+            <property name="spacing">10</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="label">Output Device:</property>
+                <property name="halign">start</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="outputbox">
+                <property name="visible">True</property>
+                <property name="hexpand">True</property>
+                <signal name="changed" handler="on_outputbox" swapped="no"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="refresh_button">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="tooltip-text">Refresh output devices</property>
+                <property name="label">🔄</property>
+                <signal name="clicked" handler="on_refresh_outputs" swapped="no"/>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkGrid" id="grid">
+            <property name="visible">True</property>
+            <property name="margin">5</property>
+            <property name="margin_top">10</property>
+            <property name="margin_bottom">10</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>
+
