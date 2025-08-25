@@ -366,6 +366,15 @@ class Equalizer(Gtk.ApplicationWindow):
     @Gtk.Template.Callback()
     def on_refresh_outputs(self, widget):
         """Refresh the output devices list"""
+        global last_selected_sink
+        
+        # Remember the currently selected device before refresh
+        current_selection_index = self.outputbox.get_active()
+        current_selected_sink = None
+        if current_selection_index >= 0 and current_selection_index < len(profile_sinks):
+            current_selected_sink = profile_sinks[current_selection_index]
+            last_selected_sink = current_selected_sink  # Update our tracking variable
+        
         GetOutputDevices()
         
         # Clear and repopulate the output combo box
@@ -373,9 +382,44 @@ class Equalizer(Gtk.ApplicationWindow):
         for profile in profiles:
             self.outputbox.append_text(profile)
         
-        # Set default selection
+        # Try to restore the previously selected device
         if num_profiles > 0:
-            self.outputbox.set_active(0)
+            selected_index = 0  # Default fallback
+            
+            # First, try to restore the previously selected device
+            if current_selected_sink:
+                for i, sink_name in enumerate(profile_sinks):
+                    if sink_name == current_selected_sink:
+                        selected_index = i
+                        print(f"Refresh: Restored selection to device {i} ({profiles[i]})")
+                        break
+                else:
+                    print(f"Refresh: Previously selected device '{current_selected_sink}' no longer available")
+            
+            # If we couldn't restore previous selection, try to find a RUNNING device
+            if selected_index == 0 and last_selected_sink:
+                try:
+                    result = subprocess.run(
+                        "pactl list sinks short | grep -v ladspa",
+                        shell=True, capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split('\n'):
+                            if 'RUNNING' in line:
+                                parts = line.split('\t')
+                                if len(parts) >= 2:
+                                    running_sink = parts[1]
+                                    for i, sink_name in enumerate(profile_sinks):
+                                        if sink_name == running_sink:
+                                            selected_index = i
+                                            last_selected_sink = running_sink
+                                            print(f"Refresh: Found RUNNING device {i} ({profiles[i]})")
+                                            break
+                                    break
+                except Exception as e:
+                    print(f"Warning: Error finding running device during refresh: {e}")
+            
+            self.outputbox.set_active(selected_index)
         
         print(f"Refreshed output devices: {num_profiles} devices found")
 
