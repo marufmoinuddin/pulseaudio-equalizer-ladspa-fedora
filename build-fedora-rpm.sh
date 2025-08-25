@@ -1,11 +1,11 @@
 #!/bin/bash
-# Build script for Fedora RPM package
+# Build script for Fedora RPM package - PipeWire Compatible Version
 
 set -e
 
 # Package information
 PACKAGE_NAME="pulseaudio-equalizer-ladspa"
-VERSION="3.0.2"
+VERSION="4.0.1"
 SPEC_FILE="${PACKAGE_NAME}.spec"
 
 # Colors for output
@@ -14,7 +14,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Building Fedora RPM package for ${PACKAGE_NAME}${NC}"
+echo -e "${GREEN}Building Fedora RPM package for ${PACKAGE_NAME} (PipeWire Compatible)${NC}"
 
 # Check if we're running on Fedora
 if ! command -v dnf &> /dev/null; then
