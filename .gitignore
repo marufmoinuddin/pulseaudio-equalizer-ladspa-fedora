@@ -3,6 +3,17 @@ rpmbuild/
 *.rpm
 *.src.rpm
 
+# Arch Linux PKGBUILD artifacts
+src/
+pkg/
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.pkg.tar.gz
+*.pkg.tar.bz2
+.BUILDINFO
+.PKGINFO
+.MTREE
+
 # Python bytecode
 __pycache__/
 *.py[cod]
@@ -14,6 +25,8 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+pkg/
+pulseaudio-equalizer-ladspa*/
 
 # Meson build directories
 builddir/
@@ -48,7 +61,10 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.zip
+!pulseaudio-equalizer-ladspa-*.tar.gz
 !*-source.tar.*
+!create-archive.sh
+!README-Arch.md
 
 # Local configuration
 .env
