@@ -12,11 +12,15 @@ depends=(
     'bc'
     'glib2'
     'gtk3'
-    'pipewire-pulse'
+    'libpulse'                    # Client library only (works with PipeWire)
     'python'
     'python-gobject'
     'swh-plugins'
     'systemd'
+)
+optdepends=(
+    'pipewire-pulse: PipeWire PulseAudio compatibility (recommended)'
+    'pulseaudio: PulseAudio sound server (alternative)'
 )
 makedepends=(
     'meson>=0.46.0'
@@ -24,6 +28,8 @@ makedepends=(
     'git'
     'python-setuptools'
 )
+conflicts=('pulseaudio-equalizer')
+provides=('pulseaudio-equalizer')
 source=("$pkgname::git+file://$PWD")
 sha256sums=('SKIP')
 
@@ -38,4 +44,7 @@ package() {
     # Python byte-compilation
     python -m compileall -q -d /usr/lib \
         "$pkgdir/usr/lib/python$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    
+    # Ensure systemd user service directory exists
+    install -dm755 "$pkgdir/usr/lib/systemd/user"
 }
