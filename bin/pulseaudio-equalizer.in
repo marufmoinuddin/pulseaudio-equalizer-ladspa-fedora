@@ -82,6 +82,69 @@ if [ "$PIPEWIRE_MODE" = "1" ]; then
             ;;
         "interface.getsettings")
             # GUI interface - output current settings
+            # Ensure that user config directory exists
+            if [ ! -d "$CONFIG_DIR" ]; then
+                mkdir -p "$CONFIG_DIR"
+            fi
+            
+            # Ensure that user preset directory exists
+            if [ ! -d "$PRESET_DIR1" ]; then
+                mkdir -p "$PRESET_DIR1"
+            fi
+            
+            # Initialize config file if it doesn't exist
+            if [ ! -f "$CONFIG_NAME" ]; then
+                cat > "$CONFIG_NAME" <<EOF
+mbeq_1197
+Multiband EQ
+mbeq
+0
+
+1
+1
+-70
++30
+15
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+EOF
+            fi
+            
+            # Generate list of available presets
+            find "$PRESET_DIR2" -name '*.preset' -type f 2>/dev/null | sed "s|$PRESET_DIR2/||g" | sed 's/.preset//g' >"$CONFIG_NAME".availablepresets.unsorted 2>/dev/null || true
+            find "$PRESET_DIR1" -name '*.preset' -type f 2>/dev/null | sed "s|$PRESET_DIR1/||g" | sed 's/.preset//g' >>"$CONFIG_NAME".availablepresets.unsorted 2>/dev/null || true
+            sort "$CONFIG_NAME".availablepresets.unsorted 2>/dev/null >"$CONFIG_NAME".availablepresets 2>/dev/null || touch "$CONFIG_NAME".availablepresets
+            rm -f "$CONFIG_NAME".availablepresets.unsorted 2>/dev/null || true
+            
             echo "ladspa_filename=mbeq_1197"
             echo "ladspa_name=\"Multiband EQ\""
             echo "ladspa_label=mbeq"
@@ -115,7 +178,10 @@ if [ "$PIPEWIRE_MODE" = "1" ]; then
             FREQUENCY_INPUTS=""
             line_num=26
             for i in $(seq 1 15); do
-                value=$(sed -n "${line_num}p" "$CONFIG_NAME")
+                value=$(sed -n "${line_num}p" "$CONFIG_NAME" 2>/dev/null)
+                if [ -z "$value" ]; then
+                    value=""
+                fi
                 if [ $i -eq 1 ]; then
                     FREQUENCY_INPUTS="$value"
                 else

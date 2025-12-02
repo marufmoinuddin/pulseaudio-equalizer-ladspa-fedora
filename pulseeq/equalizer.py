@@ -224,6 +224,10 @@ class FrequencyLabel(Gtk.Label):
             self.set_frequency(frequency)
 
     def set_frequency(self, frequency):
+        # Handle empty or None frequency values
+        if not frequency or frequency == '':
+            self.set_label('<small>-\n</small>')
+            return
         frequency = float(frequency)
         suffix = 'Hz'
 

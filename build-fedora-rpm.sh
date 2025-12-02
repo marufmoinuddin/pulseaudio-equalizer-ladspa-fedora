@@ -42,15 +42,16 @@ cp "$SPEC_FILE" ~/rpmbuild/SPECS/
 
 # Create source archive from current repository
 SOURCE_FILE="${PACKAGE_NAME}-${VERSION}.tar.gz"
-if [ ! -f ~/rpmbuild/SOURCES/"$SOURCE_FILE" ]; then
-    echo -e "${YELLOW}Creating source archive from current repository...${NC}"
-    cd "$(dirname "$0")"
-    git archive --format=tar.gz --prefix="${PACKAGE_NAME}-${VERSION}-pipewire/" \
-                -o ~/rpmbuild/SOURCES/"$SOURCE_FILE" HEAD
-    cd - > /dev/null
-else
-    echo -e "${GREEN}Source file already exists${NC}"
-fi
+echo -e "${YELLOW}Creating source archive from current working directory...${NC}"
+cd "$(dirname "$0")"
+# Remove old tarball to ensure fresh build
+rm -f ~/rpmbuild/SOURCES/"$SOURCE_FILE"
+# Create tarball from working directory instead of git to include uncommitted changes
+tar --transform="s,^,${PACKAGE_NAME}-${VERSION}-pipewire/," \
+    --exclude='.git' --exclude='*.pyc' --exclude='__pycache__' \
+    --exclude='build' --exclude='*.rpm' --exclude='*.tar.gz' \
+    -czf ~/rpmbuild/SOURCES/"$SOURCE_FILE" .
+cd - > /dev/null
 
 # Install build-time dependencies
 echo -e "${YELLOW}Installing build-time dependencies...${NC}"
