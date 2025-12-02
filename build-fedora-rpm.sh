@@ -30,7 +30,7 @@ fi
 
 # Install build dependencies
 echo -e "${YELLOW}Installing build dependencies...${NC}"
-sudo dnf install -y rpm-build rpmdevtools meson ninja-build python3-devel python3-setuptools
+sudo dnf install -y rpm-build rpmdevtools meson ninja-build python3-devel python3-setuptools gcc glib2-devel gtk3-devel
 
 # Set up RPM build tree
 echo -e "${YELLOW}Setting up RPM build environment...${NC}"

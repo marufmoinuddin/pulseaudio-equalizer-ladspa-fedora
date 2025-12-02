@@ -15,6 +15,8 @@ BuildRequires:  ninja-build
 BuildRequires:  git
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
+BuildRequires:  glib2-devel
+BuildRequires:  gtk3-devel
 
 Requires:       bash
 Requires:       bc
