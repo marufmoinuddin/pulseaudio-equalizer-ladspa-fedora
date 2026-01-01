@@ -1,8 +1,8 @@
 # Maintainer: Your Name <your.email@example.com>
 
 pkgname=pulseaudio-equalizer-ladspa
-pkgver=2.8.1
-pkgrel=1
+pkgver=3.0.2
+pkgrel=11
 pkgdesc="A 15-band equalizer for PulseAudio/PipeWire (PipeWire-optimized)"
 arch=('any')
 url="https://github.com/pulseaudio-equalizer-ladspa/equalizer"
@@ -30,7 +30,7 @@ makedepends=(
 )
 conflicts=('pulseaudio-equalizer')
 provides=('pulseaudio-equalizer')
-source=("$pkgname::git+file://$PWD")
+source=("https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 build() {
