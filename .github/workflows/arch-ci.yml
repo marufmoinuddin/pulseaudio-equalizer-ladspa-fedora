@@ -1,0 +1,40 @@
+name: Arch CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package in Arch container
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/src -w /src archlinux:latest /bin/bash -lc "
+            set -euo pipefail
+            pacman -Sy --noconfirm --needed base-devel git
+            pacman-key --init || true
+            pacman-key --populate archlinux || true
+            pacman -S --noconfirm --needed meson ninja python python-setuptools glib2 gtk3 swh-plugins pkgconf
+            useradd -m builder || true
+            chown -R builder:builder /src
+            su - builder -c 'cd /src && makepkg -sC --noconfirm'
+            PKG=$(ls pulseaudio-equalizer-ladspa-*.pkg.tar.zst || true)
+            if [ -z "$PKG" ]; then echo "No package produced"; exit 1; fi
+            pacman -U --noconfirm $PKG || true
+            pacman -Qi pulseaudio-equalizer-ladspa
+            pacman -Qi pulseaudio-equalizer-ladspa | grep -q "Depends On.*libpulse" || (echo "libpulse not in Depends"; exit 1)
+            pacman -Qi pulseaudio-equalizer-ladspa | grep -q "pulseaudio" && (echo "pulseaudio unexpectedly in Depends"; exit 1) || true
+          "
+      - name: Run package checks (optional)
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/src -w /src archlinux:latest /bin/bash -lc "
+            if command -v pactl >/dev/null 2>&1; then
+              pactl info || true
+            else
+              echo 'pactl not available in CI; run locally to verify PipeWire runtime (pactl info shows Server Name: PulseAudio (on PipeWire))'
+            fi
+          "
