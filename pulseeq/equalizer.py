@@ -22,6 +22,29 @@ from gi.repository import Gtk, Gio, GLib
 
 from pulseeq.constants import *
 
+# figure out which mbeq plugin is actually installed; newer swh-plugins can
+# ship with names such as mbeq_1197, mbeq_1300, etc.  hard‑coding the
+# filename causes the equalizer to break when the package is upgraded, which
+# is exactly what happened after the user reported audio disappearing on
+# Arch Linux.
+
+def detect_mbeq_plugin():
+    """Return the basename of the first MBEQ LADSPA plugin found, or None."""
+    dirs = ['/usr/lib/ladspa', '/usr/lib64/ladspa']
+    for d in dirs:
+        try:
+            for fname in os.listdir(d):
+                if fname.startswith('mbeq') and fname.endswith('.so'):
+                    return fname[:-3]
+        except FileNotFoundError:
+            continue
+    return None
+
+MBEQ_PLUGIN = detect_mbeq_plugin()
+if not MBEQ_PLUGIN:
+    sys.stderr.write('error: no MBEQ LADSPA plugin found; install swh-plugins\n')
+    sys.exit(1)
+
 # Global variables for output management
 output_selected = 0
 num_profiles = 0
@@ -58,7 +81,9 @@ def GetSettings():
         rawpresets = f.read().split('\n')
     del rawpresets[len(rawpresets) - 1]
 
-    ladspa_filename = str(rawdata[0])
+    # always use the plugin we detected on this system; the value stored
+    # in the config file may be stale after an upgrade.
+    ladspa_filename = MBEQ_PLUGIN
     ladspa_name = str(rawdata[1])
     ladspa_label = str(rawdata[2])
     preamp = rawdata[3]
@@ -301,7 +326,9 @@ class Equalizer(Gtk.ApplicationWindow):
             else:
                 print("Can't find %s preset" % preset)
 
-            ladspa_filename = str(rawdata[0])
+            # ignore whatever the preset claims to use for filename; we always
+            # load whichever mbeq plugin is installed on the system
+            ladspa_filename = MBEQ_PLUGIN
             ladspa_name = str(rawdata[1])
             ladspa_label = str(rawdata[2])
             preset = str(rawdata[4])

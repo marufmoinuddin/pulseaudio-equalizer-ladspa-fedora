@@ -15,7 +15,9 @@ depends=(
     'libpulse'                    # Client library only (works with PipeWire)
     'python'
     'python-gobject'
-    'swh-plugins'
+    # recent Arch renames the old swh-plugins package to ladspa-swh-plugins
+    # (same as Fedora); require the new name so the MBEQ plugin is present.
+    'ladspa-swh-plugins'
     'systemd'
 )
 optdepends=(

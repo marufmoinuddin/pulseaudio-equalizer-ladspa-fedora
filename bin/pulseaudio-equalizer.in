@@ -4,6 +4,35 @@
 # This script provides compatibility between the original pulseaudio-equalizer
 # and PipeWire's PulseAudio compatibility layer
 
+# Detect the multiband‑EQ plugin shipped by the SWH LADSPA package.  Arch
+# recently renamed/updated the package, and the actual filename changed
+# (mbeq_1197 → mbeq_1197, mbeq_1300, etc.).  If we hard‑code the name
+# we end up loading a non–existent sink and the default sink is switched
+# to it, which results in total silence after an update.
+#
+# `detect_mbeq` returns the basename of the first matching .so file or
+# an empty string if nothing is found.  We bail early in that case.
+detect_mbeq() {
+    for d in /usr/lib/ladspa /usr/lib64/ladspa; do
+        [ -d "$d" ] || continue
+        # look for any mbeq plugin (mbeq.so or mbeq_*.so)
+        file=$(ls "$d"/mbeq*.so 2>/dev/null | head -n1)
+        if [ -n "$file" ]; then
+            basename "$file" .so
+            return
+        fi
+    done
+    echo ""
+}
+
+MBEQ_PLUGIN=$(detect_mbeq)
+if [ -z "$MBEQ_PLUGIN" ]; then
+    echo "ERROR: no MBEQ LADSPA plugin found (is swh-plugins installed?)" >&2
+    exit 1
+fi
+MBEQ_LABEL=mbeq
+MBEQ_SINK="ladspa_output.${MBEQ_PLUGIN}.${MBEQ_LABEL}"
+
 # Check if we're running with PipeWire
 if systemctl --user is-active --quiet pipewire-pulse; then
     PIPEWIRE_MODE=1
@@ -30,13 +59,16 @@ if [ "$PIPEWIRE_MODE" = "1" ]; then
         "enable")
             echo "Enabling LADSPA equalizer with PipeWire..."
             # Use pactl directly instead of the complex original script
-            pactl load-module module-ladspa-sink \
-                sink_name=ladspa_output.mbeq_1197.mbeq \
+            if ! pactl load-module module-ladspa-sink \
+                sink_name="${MBEQ_SINK}" \
                 sink_master="$(pactl get-default-sink)" \
-                plugin=mbeq_1197 \
-                label=mbeq \
-                control="-3.0,2.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0"
-            pactl set-default-sink ladspa_output.mbeq_1197.mbeq
+                plugin="${MBEQ_PLUGIN}" \
+                label="${MBEQ_LABEL}" \
+                control="-3.0,2.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0"; then
+                echo "Failed to load LADSPA module, leaving default sink unchanged" >&2
+                exit 1
+            fi
+            pactl set-default-sink "${MBEQ_SINK}"
             echo "LADSPA equalizer enabled"
             ;;
         "disable")
@@ -144,9 +176,9 @@ EOF
             sort "$CONFIG_NAME".availablepresets.unsorted 2>/dev/null >"$CONFIG_NAME".availablepresets 2>/dev/null || touch "$CONFIG_NAME".availablepresets
             rm -f "$CONFIG_NAME".availablepresets.unsorted 2>/dev/null || true
             
-            echo "ladspa_filename=mbeq_1197"
+            echo "ladspa_filename=${MBEQ_PLUGIN}"
             echo "ladspa_name=\"Multiband EQ\""
-            echo "ladspa_label=mbeq"
+            echo "ladspa_label=${MBEQ_LABEL}"
             echo "preamp=0"
             echo "status=1"
             echo "persistence=1"
@@ -214,7 +246,7 @@ EOF
             fi
             
             # Get current LADSPA module details to preserve output device
-            MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1)
+            MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "${MBEQ_LABEL}" | cut -f1)
             if [ ! -z "$MODULE_ID" ]; then
                 # Extract current sink_master from the existing module
                 CURRENT_MASTER=$(pactl list modules | grep -A 20 "Name: module-ladspa-sink" | grep "sink_master=" | sed 's/.*sink_master=\([^ ]*\).*/\1/')
@@ -228,28 +260,34 @@ EOF
             fi
             
             # Re-enable with new settings but preserve output device
-            pactl load-module module-ladspa-sink \
-                sink_name=ladspa_output.mbeq_1197.mbeq \
+            if ! pactl load-module module-ladspa-sink \
+                sink_name="${MBEQ_SINK}" \
                 sink_master="$MASTER_SINK" \
-                plugin=mbeq_1197 \
-                label=mbeq \
-                control="$CURRENT_CONTROLS"
-            pactl set-default-sink ladspa_output.mbeq_1197.mbeq
+                plugin="${MBEQ_PLUGIN}" \
+                label="${MBEQ_LABEL}" \
+                control="$CURRENT_CONTROLS"; then
+                echo "Failed to reload LADSPA module, default sink unchanged" >&2
+                exit 1
+            fi
+            pactl set-default-sink "${MBEQ_SINK}"
             echo "Applied settings to output device: $MASTER_SINK"
             ;;
         "interface.resetsettings")
             # GUI interface - reset to flat
             echo "Resetting LADSPA equalizer to flat..."
-            MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1)
+            MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "${MBEQ_LABEL}" | cut -f1)
             if [ ! -z "$MODULE_ID" ]; then
                 pactl unload-module $MODULE_ID
-                pactl load-module module-ladspa-sink \
-                    sink_name=ladspa_output.mbeq_1197.mbeq \
+                if ! pactl load-module module-ladspa-sink \
+                    sink_name="${MBEQ_SINK}" \
                     sink_master="$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)" \
-                    plugin=mbeq_1197 \
-                    label=mbeq \
-                    control="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0"
-                pactl set-default-sink ladspa_output.mbeq_1197.mbeq
+                    plugin="${MBEQ_PLUGIN}" \
+                    label="${MBEQ_LABEL}" \
+                    control="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0"; then
+                    echo "Failed to reload module during reset" >&2
+                    exit 1
+                fi
+                pactl set-default-sink "${MBEQ_SINK}"
             fi
             echo "Reset complete"
             ;;
@@ -297,15 +335,18 @@ EOF
                 
                 # Load new LADSPA module with the new master sink
                 echo "Loading equalizer with new output: $NEW_MASTER_SINK"
-                pactl load-module module-ladspa-sink \
-                    sink_name=ladspa_output.mbeq_1197.mbeq \
+                if ! pactl load-module module-ladspa-sink \
+                    sink_name="${MBEQ_SINK}" \
                     sink_master="$NEW_MASTER_SINK" \
-                    plugin=mbeq_1197 \
-                    label=mbeq \
-                    control="$CURRENT_CONTROLS"
+                    plugin="${MBEQ_PLUGIN}" \
+                    label="${MBEQ_LABEL}" \
+                    control="$CURRENT_CONTROLS"; then
+                    echo "Failed to load LADSPA module during output update" >&2
+                    exit 1
+                fi
                 
                 # Set the LADSPA sink as default
-                pactl set-default-sink ladspa_output.mbeq_1197.mbeq
+                pactl set-default-sink "${MBEQ_SINK}"
                 
                 echo "Equalizer updated for output device: $NEW_MASTER_SINK"
             else
@@ -338,9 +379,9 @@ fi
 [[ $EUID = 0 ]] && { echo "This script must not be run as root!"; exit 1; }
 
 # Default LADSPA plugin & control settings; settings will be overridden if $CONFIG_NAME file exists.
-PA_LADSPA_PLUGIN='mbeq_1197'
+PA_LADSPA_PLUGIN="${MBEQ_PLUGIN}"
 PA_LADSPA_PLUGIN_NAME='Multiband EQ'
-PA_LADSPA_LABEL='mbeq'
+PA_LADSPA_LABEL="${MBEQ_LABEL}"
 PA_NUM_LADSPA_INPUTS='15'
 PA_LADSPA_CONTROLS='0,0,0,0,0,0,0,0,0,0,0,0,0,0,0'
 PA_LADSPA_INPUTS='50,100,156,220,311,440,622,880,1250,1750,2500,3500,5000,10000,20000'
