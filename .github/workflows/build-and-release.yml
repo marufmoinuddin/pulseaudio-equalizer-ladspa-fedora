@@ -1,84 +1,62 @@
-name: Build and Release RPM
+name: Build and Release
 
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v3.0.2
-  pull_request:
-    branches: [ main, fedora-conversion ]
-  workflow_dispatch:  # Allows manual triggering
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-rpm:
     runs-on: ubuntu-latest
     container:
       image: fedora:42
-    
+
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install build dependencies
+    - uses: actions/checkout@v4
+
+    - uses: ./.github/actions/setup-build
+
+    - name: Extract version
+      id: version
       run: |
-        dnf update -y
-        dnf install -y rpm-build rpmdevtools meson ninja-build git \
-                       python3-devel python3-setuptools \
-                       glib2-devel bc bash wget
-        
-    - name: Set up RPM build environment
-      run: |
-        rpmdev-setuptree
-        
+        VERSION=$(rpmspec --query --queryformat '%{VERSION}\n' pulseaudio-equalizer-ladspa.spec)
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
     - name: Download source tarball
       run: |
-        VERSION=$(grep "Version:" pulseaudio-equalizer-ladspa.spec | awk '{print $2}' | tr -d ' ')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
         cd /github/home/rpmbuild/SOURCES/
-        # Use the actual upstream version (3.0.2) but save as our package version
-        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v3.0.2.tar.gz" \
-             -O "pulseaudio-equalizer-ladspa-${VERSION}.tar.gz"
-        
-    - name: Copy spec file
+        wget "https://github.com/pulseaudio-equalizer-ladspa/equalizer/archive/v${{ steps.version.outputs.VERSION }}.tar.gz" \
+             -O "pulseaudio-equalizer-ladspa-${{ steps.version.outputs.VERSION }}.tar.gz"
+
+    - name: Build RPM
       run: |
         cp pulseaudio-equalizer-ladspa.spec /github/home/rpmbuild/SPECS/
-        
-    - name: Install build dependencies from spec
-      run: |
         dnf builddep -y /github/home/rpmbuild/SPECS/pulseaudio-equalizer-ladspa.spec
-        
-    - name: Build RPM packages
-      run: |
         cd /github/home/rpmbuild/SPECS/
         rpmbuild -ba pulseaudio-equalizer-ladspa.spec
-        
-    - name: List built packages
-      run: |
-        echo "=== Built RPM Packages ==="
-        find /github/home/rpmbuild -name "*.rpm" -ls
-        
-    - name: Copy RPM packages to workspace
+
+    - name: Copy RPM packages
       run: |
         mkdir -p /github/workspace/rpms
         cp /github/home/rpmbuild/RPMS/noarch/*.rpm /github/workspace/rpms/
         cp /github/home/rpmbuild/SRPMS/*.rpm /github/workspace/rpms/
-        ls -la /github/workspace/rpms/
-        
-    - name: Upload RPM artifacts
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: rpm-packages-${{ env.VERSION }}
+        name: rpm-packages-${{ steps.version.outputs.VERSION }}
         path: rpms/*.rpm
         retention-days: 30
-        
-    - name: Verify RPM package
+
+    - name: Verify RPM
       run: |
-        cd /github/workspace/rpms/
-        for rpm in *.noarch.rpm; do
-          echo "=== Verifying $rpm ==="
+        for rpm in /github/workspace/rpms/*.noarch.rpm; do
           rpm -qpi "$rpm"
-          echo "=== Package contents ==="
           rpm -qpl "$rpm" | head -20
-          echo ""
         done
 
   test-rpm:
@@ -86,126 +64,66 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: fedora:42
-      
+
     steps:
-    - name: Download RPM artifacts
-      uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v4
       with:
-        name: rpm-packages-${{ needs.build-rpm.outputs.version || github.ref_name }}
+        name: rpm-packages-${{ needs.build-rpm.outputs.version }}
         path: rpms/
-        
+
     - name: Install runtime dependencies
       run: |
         dnf update -y
-        dnf install -y bash bc glib2 gtk3 pulseaudio python3 \
-                       python3-gobject ladspa-swh-plugins
-        
+        dnf install -y ruby glib2 gtk3 python3 python3-gobject ladspa-swh-plugins
+
     - name: Test RPM installation
       run: |
-        cd rpms/
-        rpm -i *.noarch.rpm
-        
-    - name: Verify installation
-      run: |
-        echo "=== Checking installed files ==="
+        rpm -i rpms/*.noarch.rpm
         rpm -ql pulseaudio-equalizer-ladspa
-        
-        echo "=== Checking executables ==="
-        which pulseaudio-equalizer
-        which pulseaudio-equalizer-gtk
-        
-        echo "=== Testing Python module import ==="
-        python3 -c "import pulseeq; print('✅ Python module loads successfully')"
+        python3 -c "import sys; sys.path.insert(0, '/usr/lib/python3*/site-packages'); import pulseeq.pulse; print('Python module OK')"
 
   create-release:
     needs: [build-rpm, test-rpm]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Download RPM artifacts
-      uses: actions/download-artifact@v4
+    - uses: actions/checkout@v4
+
+    - uses: actions/download-artifact@v4
       with:
-        name: rpm-packages-${{ github.ref_name }}
+        name: rpm-packages-${{ needs.build-rpm.outputs.version }}
         path: rpms/
-        
+
     - name: Generate release notes
-      id: release_notes
+      id: notes
       run: |
         VERSION=${GITHUB_REF#refs/tags/v}
-        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        
-        cat > release_notes.md << EOF
-        # PulseAudio Equalizer LADSPA ${VERSION} - Fedora 42 RPM
-        
-        ## 📦 Package Information
-        - **Version**: ${VERSION}
-        - **Target**: Fedora 42
-        - **Architecture**: noarch
-        - **License**: GPL-3.0-or-later
-        
-        ## 🚀 Installation
-        
+        cat > release_notes.md <<-EOF
+        # PulseAudio Equalizer LADSPA v${VERSION}
+
+        ## Installation
         \`\`\`bash
-        # Download the RPM package
-        wget https://github.com/marufmoinuddin/pulseaudio-equalizer-ladspa-fedora/releases/download/v${VERSION}/pulseaudio-equalizer-ladspa-${VERSION}-1.fc42.noarch.rpm
-        
-        # Install the package
         sudo dnf install ./pulseaudio-equalizer-ladspa-${VERSION}-1.fc42.noarch.rpm
-        
-        # Run the application
-        pulseaudio-equalizer-gtk
         \`\`\`
-        
-        ## 📋 Dependencies
-        
-        The following packages will be automatically installed as dependencies:
-        - bash, bc, glib2, gtk3, pulseaudio
-        - python3, python3-gobject
-        - ladspa-swh-plugins
-        
-        ## 🎵 Features
-        
-        - 15-band graphic equalizer for PulseAudio
-        - 26+ built-in audio presets (Rock, Classical, Bass Boost, etc.)
-        - Real-time audio equalization through LADSPA
+
+        ## Features
+        - 15-band graphic equalizer for PipeWire/PulseAudio
+        - 26+ built-in audio presets
         - GTK3 interface with desktop integration
-        
-        ## 📁 Package Contents
-        
-        - \`/usr/bin/pulseaudio-equalizer\` - Command-line interface
-        - \`/usr/bin/pulseaudio-equalizer-gtk\` - GTK GUI application
-        - \`/usr/share/applications/\` - Desktop application entry
-        - \`/usr/share/pulseaudio-equalizer-ladspa/presets/\` - Audio presets
-        - Python modules and documentation
-        
-        ## ⚠️ Requirements
-        
-        - **PulseAudio**: Requires actual PulseAudio (not PipeWire compatibility)
-        - **LADSPA**: SWH plugins package is essential
-        - **Python**: Built for Python 3.13 (Fedora 42)
-        
-        ---
-        
-        **SHA256 Checksums:**
+
+        **SHA256:**
+        \`\`\`
+        $(cd rpms && sha256sum *.rpm)
         \`\`\`
         EOF
-        
-        cd rpms/
-        sha256sum *.rpm >> ../release_notes.md
-        echo '```' >> ../release_notes.md
-        
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        name: "PulseAudio Equalizer LADSPA v${{ steps.release_notes.outputs.VERSION }} (Fedora 42)"
         body_path: release_notes.md
         files: rpms/*.rpm
         draft: false
         prerelease: false
-        tag_name: ${{ github.ref }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

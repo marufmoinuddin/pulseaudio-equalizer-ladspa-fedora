@@ -2,11 +2,11 @@ version = 1
 
 [[annotations]]
 path = [
-    "PKGBUILD",
+    "dist/arch/PKGBUILD",
     "README.md",
     "keys/**",
-    ".SRCINFO",
-    ".nvchecker.toml",
+    "dist/arch/.SRCINFO",
+    "dist/arch/.nvchecker.toml",
     "*.install",
     "*.sysusers",
     "*.tmpfiles",

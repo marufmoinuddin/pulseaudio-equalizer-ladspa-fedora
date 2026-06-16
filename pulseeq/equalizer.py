@@ -1,606 +1,126 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+from __future__ import annotations
 
-# PulseAudio Equalizer (PyGTK Interface)
-#
-# Intended for use in conjunction with pulseaudio-equalizer script
-#
-# Author: Conn O'Griofa <connogriofa AT gmail DOT com>
-# Version: 2.7.9-pipewire
-#
-
-import os
 import sys
-import subprocess
-import re
-import time
 
 import gi
 gi.check_version('3.30')
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gio, GLib
 
-from pulseeq.constants import *
+from pulseeq.pulse import (
+    EqualizerState,
+    get_settings,
+    initialize_current_output,
+    apply_settings,
+    get_output_devices,
+    switch_output,
+)
+from pulseeq.presets import load_preset, save_preset, remove_preset
+from pulseeq.constants import USER_PRESET_DIR, SYSTEM_PRESET_DIR
 
-# figure out which mbeq plugin is actually installed; newer swh-plugins can
-# ship with names such as mbeq_1197, mbeq_1300, etc.  hard‑coding the
-# filename causes the equalizer to break when the package is upgraded, which
-# is exactly what happened after the user reported audio disappearing on
-# Arch Linux.
-
-def detect_mbeq_plugin():
-    """Return the basename of the first MBEQ LADSPA plugin found, or None."""
-    dirs = ['/usr/lib/ladspa', '/usr/lib64/ladspa']
-    for d in dirs:
-        try:
-            for fname in os.listdir(d):
-                if fname.startswith('mbeq') and fname.endswith('.so'):
-                    return fname[:-3]
-        except FileNotFoundError:
-            continue
-    return None
-
-MBEQ_PLUGIN = detect_mbeq_plugin()
-if not MBEQ_PLUGIN:
-    sys.stderr.write('error: no MBEQ LADSPA plugin found; install swh-plugins\n')
-    sys.exit(1)
-
-# Global variables for output management
-output_selected = 0
-num_profiles = 0
-profiles = []
-profile_sinks = []  # Store actual sink names corresponding to profiles
-last_selected_sink = None  # Track the last user-selected output device
-
-def GetSettings():
-    global rawdata
-    global rawpresets
-    global ladspa_filename
-    global ladspa_name
-    global ladspa_label
-    global preamp
-    global num_ladspa_controls
-    global ladspa_controls
-    global ladspa_inputs
-    global status
-    global persistence
-    global preset
-    global ranges
-    global presetmatch
-    global clearpreset
-
-    print('Getting settings...')
-
-    os.system('pulseaudio-equalizer interface.getsettings')
-
-    with open(CONFIG_FILE, 'r') as f:
-        rawdata = f.read().split('\n')
-
-    rawpresets = {}
-    with open(PRESETS_FILE, 'r') as f:
-        rawpresets = f.read().split('\n')
-    del rawpresets[len(rawpresets) - 1]
-
-    # always use the plugin we detected on this system; the value stored
-    # in the config file may be stale after an upgrade.
-    ladspa_filename = MBEQ_PLUGIN
-    ladspa_name = str(rawdata[1])
-    ladspa_label = str(rawdata[2])
-    preamp = rawdata[3]
-    preset = str(rawdata[4])
-    status = int(rawdata[5])
-    persistence = int(rawdata[6])
-    ranges = rawdata[7:9]
-    num_ladspa_controls = int(rawdata[9])
-    ladspa_controls = rawdata[10:10 + num_ladspa_controls]
-    ladspa_inputs = rawdata[10 + num_ladspa_controls:10 + num_ladspa_controls + num_ladspa_controls]
-
-    clearpreset = 1
-    presetmatch = ''
-    for i in range(len(rawpresets)):
-        if rawpresets[i] == preset:
-            print('Match!')
-            presetmatch = 1
-
-
-def InitializeCurrentOutput():
-    """Initialize last_selected_sink by detecting currently running non-ladspa sink"""
-    global last_selected_sink
-    
-    try:
-        # First try to get the current equalizer master sink if equalizer is already running
-        result = subprocess.run(
-            "pactl list modules | grep -A 20 'module-ladspa-sink' | grep 'master=' | cut -d'=' -f2 | cut -d' ' -f1",
-            shell=True, capture_output=True, text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            current_master = result.stdout.strip()
-            last_selected_sink = current_master
-            print(f"Initialized last_selected_sink to current equalizer master: {current_master}")
-            return
-        
-        # If no equalizer is running, find the currently RUNNING non-ladspa sink
-        result = subprocess.run(
-            "pactl list sinks short | grep -v ladspa",
-            shell=True, capture_output=True, text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            # Look for RUNNING sinks first
-            for line in result.stdout.strip().split('\n'):
-                if 'RUNNING' in line:
-                    parts = line.split('\t')
-                    if len(parts) >= 2:
-                        running_sink = parts[1]
-                        last_selected_sink = running_sink
-                        print(f"Initialized last_selected_sink to running sink: {running_sink}")
-                        return
-            
-            # If no RUNNING sink found, get the first available non-ladspa sink
-            first_line = result.stdout.strip().split('\n')[0]
-            parts = first_line.split('\t')
-            if len(parts) >= 2:
-                fallback_sink = parts[1]
-                last_selected_sink = fallback_sink
-                print(f"Initialized last_selected_sink to fallback sink: {fallback_sink}")
-        else:
-            print("Could not detect any suitable output device")
-            last_selected_sink = None
-    except Exception as e:
-        print(f"Error detecting current output device: {e}")
-        last_selected_sink = None
-
-
-def ApplySettings():
-    """Apply equalizer settings and restore output device"""
-    global last_selected_sink
-    print('Applying settings...')
-    
-    # Write settings to config file
-    with open(CONFIG_FILE, 'w') as f:
-        data = [
-            str(ladspa_filename), str(ladspa_name), str(ladspa_label),
-            str(preamp), str(preset), str(status), str(persistence),
-            *map(str, ranges), str(num_ladspa_controls),
-            *map(str, ladspa_controls), *map(str, ladspa_inputs)
-        ]
-        f.write('\n'.join(data) + '\n')
-
-    # Apply the equalizer settings
-    os.system('pulseaudio-equalizer interface.applysettings')
-    
-    # Restore the last selected output device if we have one
-    if last_selected_sink and last_selected_sink != "default":
-        print(f'Restoring output to: {last_selected_sink}')
-        try:
-            # Small delay to ensure the LADSPA module has been recreated
-            time.sleep(0.5)
-            result = subprocess.run(
-                f"pulseaudio-equalizer update-output {last_selected_sink}",
-                shell=True, capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                print(f"Successfully restored output to: {last_selected_sink}")
-            else:
-                print(f"Warning: Could not restore output device: {result.stderr}")
-                # Try alternative approach with pactl directly
-                subprocess.run(
-                    f"pactl set-default-sink {last_selected_sink}",
-                    shell=True, capture_output=True, text=True
-                )
-                print(f"Fallback: Set default sink to {last_selected_sink}")
-        except Exception as e:
-            print(f"Warning: Error restoring output device: {e}")
-    else:
-        print(f"No output device to restore (last_selected_sink = {last_selected_sink})")
-
-def GetOutputDevices():
-    """Get available output devices using pactl"""
-    global profiles
-    global profile_sinks
-    global num_profiles
-    
-    profiles = []
-    profile_sinks = []
-    
-    try:
-        # Get sinks using pactl
-        result = subprocess.run("pactl list sinks short", shell=True, capture_output=True, text=True)
-        if result.returncode == 0:
-            for line in result.stdout.strip().split('\n'):
-                if line:
-                    parts = line.split('\t')
-                    if len(parts) >= 2:
-                        sink_name = parts[1]
-                        # Skip LADSPA sinks to avoid recursion
-                        if 'ladspa' not in sink_name:
-                            # Get friendly name
-                            desc_result = subprocess.run(
-                                f"pactl list sinks | grep -A 20 'Name: {sink_name}' | grep 'Description:' | head -1",
-                                shell=True, capture_output=True, text=True
-                            )
-                            if desc_result.returncode == 0:
-                                import re
-                                desc_match = re.search(r'Description: (.+)', desc_result.stdout)
-                                friendly_name = desc_match.group(1) if desc_match else sink_name
-                            else:
-                                friendly_name = sink_name
-                            
-                            profiles.append(friendly_name)
-                            profile_sinks.append(sink_name)  # Store the actual sink name
-    
-    except Exception as e:
-        print(f"Error getting output devices: {e}")
-        profiles = ["Default Output"]
-        profile_sinks = ["default"]
-    
-    if not profiles:
-        profiles = ["Default Output"]
-        profile_sinks = ["default"]
-    
-    num_profiles = len(profiles)
-    print(f"Found {num_profiles} output devices: {profiles}")
-    print(f"Corresponding sink names: {profile_sinks}")
 
 class FrequencyLabel(Gtk.Label):
-    def __init__(self, frequency=None):
-        super(FrequencyLabel, self).__init__(visible=True, use_markup=True,
-                                             justify=Gtk.Justification.CENTER)
+    def __init__(self, frequency: float | None = None, **kwargs):
+        super().__init__(visible=True, use_markup=True,
+                         justify=Gtk.Justification.CENTER, **kwargs)
         if frequency is not None:
             self.set_frequency(frequency)
 
-    def set_frequency(self, frequency):
-        # Handle empty or None frequency values
+    def set_frequency(self, frequency: float | str) -> None:
         if not frequency or frequency == '':
             self.set_label('<small>-\n</small>')
             return
-        frequency = float(frequency)
+        freq = float(frequency)
         suffix = 'Hz'
-
-        if frequency > 999:
-            frequency = frequency / 1000
+        if freq > 999:
+            freq /= 1000
             suffix = 'KHz'
+        self.set_label(f'<small>{freq:g}\n{suffix}</small>')
 
-        self.set_label('<small>{0:g}\n{1}</small>'.format(frequency, suffix))
 
 @Gtk.Template(resource_path='/com/github/pulseaudio-equalizer-ladspa/Equalizer/ui/Equalizer.ui')
 class Equalizer(Gtk.ApplicationWindow):
-    __gtype_name__= "Equalizer"
+    __gtype_name__ = 'Equalizer'
 
-    grid = Gtk.Template.Child()
-    presetsbox = Gtk.Template.Child()
-    outputbox = Gtk.Template.Child()
+    grid: Gtk.Grid = Gtk.Template.Child()
+    presetsbox: Gtk.ComboBoxText = Gtk.Template.Child()
+    outputbox: Gtk.ComboBoxText = Gtk.Template.Child()
 
-    def on_scale(self, widget, y):
-        global ladspa_controls
-        global preset
-        global clearpreset
-        newvalue = float(round(widget.get_value(), 1))
-        ladspa_controls[y] = newvalue
-        if clearpreset == 1:
-            preset = ''
-            self.presetsbox.get_child().set_text(preset)
+    def __init__(self, state: EqualizerState, **kwargs):
+        self._state = state
+        self.apply_event_source: int | None = None
+        super().__init__(**kwargs)
 
-        self.scalevalues[y].set_markup('<small>' + str(float(ladspa_controls[y])) + '\ndB</small>')
+        get_settings(self._state)
+        initialize_current_output(self._state)
 
-        if self.apply_event_source is not None:
-            GLib.source_remove (self.apply_event_source);
+        self.scales: dict[int, Gtk.Scale] = {}
+        self.labels: dict[int, FrequencyLabel] = {}
+        self.scalevalues: dict[int, Gtk.Label] = {}
 
-        self.apply_event_source = GLib.timeout_add (500, self.on_apply_event)
-
-    def on_apply_event(self):
-        ApplySettings()
-        self.apply_event_source = None
-        return False
-
-    @Gtk.Template.Callback()
-    def on_presetsbox(self, widget):
-        global preset
-        global presetmatch
-        global clearpreset
-        global ladspa_filename
-        global ladspa_name
-        global ladspa_label
-        global num_ladspa_controls
-        global ladspa_controls
-        global ladspa_inputs
-        preset = self.presetsbox.get_child().get_text()
-
-        self.lookup_action('remove').set_enabled(False)
-
-        presetmatch = ''
-        for i in range(len(rawpresets)):
-            if rawpresets[i] == preset:
-                print('Match!')
-                presetmatch = 1
-
-        if presetmatch == 1:
-            if os.path.isfile(os.path.join(USER_PRESET_DIR, preset + '.preset')):
-                f = open(os.path.join(USER_PRESET_DIR, preset + '.preset'), 'r')
-                rawdata = f.read().split('\n')
-                f.close
-                self.lookup_action('remove').set_enabled(True)
-            elif os.path.isfile(os.path.join(SYSTEM_PRESET_DIR, preset + '.preset')):
-                f = open(os.path.join(SYSTEM_PRESET_DIR, preset + '.preset'), 'r')
-                rawdata = f.read().split('\n')
-                f.close
-            else:
-                print("Can't find %s preset" % preset)
-
-            # ignore whatever the preset claims to use for filename; we always
-            # load whichever mbeq plugin is installed on the system
-            ladspa_filename = MBEQ_PLUGIN
-            ladspa_name = str(rawdata[1])
-            ladspa_label = str(rawdata[2])
-            preset = str(rawdata[4])
-            num_ladspa_controls = int(rawdata[5])
-            ladspa_controls = rawdata[6:6 + num_ladspa_controls]
-            ladspa_inputs = rawdata[6 + num_ladspa_controls:6 + num_ladspa_controls + num_ladspa_controls]
-
-            clearpreset = ''
-            for i in range(num_ladspa_controls):
-                self.scales[i].set_value(float(ladspa_controls[i]))
-                self.labels[i].set_frequency(ladspa_inputs[i])
-                self.scalevalues[i].set_markup('<small>' + str(float(ladspa_controls[i])) + '\ndB</small>')
-
-            # Set preset again due to interference from scale modifications
-            preset = str(rawdata[4])
-            clearpreset = 1
-            self.presetsbox.get_child().set_text(preset)
-            ApplySettings()
-
-            self.lookup_action('save').set_enabled(False)
-        else:
-            self.lookup_action('save').set_enabled(preset != '')
-
-    @Gtk.Template.Callback()
-    def on_outputbox(self, widget):
-        global output_selected
-        global num_profiles
-        global profiles
-        global profile_sinks
-        global last_selected_sink
-        output_selected = widget.get_active()
-        
-        if output_selected != -1 and output_selected < num_profiles:
-            selected_profile = profiles[output_selected]
-            selected_sink = profile_sinks[output_selected] if output_selected < len(profile_sinks) else "default"
-            
-            # Store the selected sink for future restoration
-            last_selected_sink = selected_sink
-            
-            print(f'Output device changed to: {selected_profile} [sink: {selected_sink}]')
-            print(f'Stored last_selected_sink: {last_selected_sink}')
-            
-            # Switch the equalizer to the new output device
-            if selected_sink != "default":
-                try:
-                    result = subprocess.run(
-                        f"pulseaudio-equalizer update-output {selected_sink}",
-                        shell=True, capture_output=True, text=True
-                    )
-                    if result.returncode == 0:
-                        print(f"Successfully switched equalizer to: {selected_profile}")
-                        # Refresh settings to ensure GUI is up to date
-                        GetSettings()
-                        # Update the GUI elements
-                        self.lookup_action('eqenabled').set_state(GLib.Variant('b', status))
-                        for i in range(num_ladspa_controls):
-                            self.scales[i].set_value(float(ladspa_controls[i]))
-                            self.scalevalues[i].set_markup('<small>' + str(float(ladspa_controls[i])) + '\ndB</small>')
-                    else:
-                        print(f"Error switching output: {result.stderr}")
-                except Exception as e:
-                    print(f"Error switching equalizer output: {e}")
-            else:
-                print("Using default output")
-
-    @Gtk.Template.Callback()
-    def on_refresh_outputs(self, widget):
-        """Refresh the output devices list"""
-        global last_selected_sink
-        
-        # Remember the currently selected device before refresh
-        current_selection_index = self.outputbox.get_active()
-        current_selected_sink = None
-        if current_selection_index >= 0 and current_selection_index < len(profile_sinks):
-            current_selected_sink = profile_sinks[current_selection_index]
-            last_selected_sink = current_selected_sink  # Update our tracking variable
-        
-        GetOutputDevices()
-        
-        # Clear and repopulate the output combo box
-        self.outputbox.remove_all()
-        for profile in profiles:
-            self.outputbox.append_text(profile)
-        
-        # Try to restore the previously selected device
-        if num_profiles > 0:
-            selected_index = 0  # Default fallback
-            
-            # First, try to restore the previously selected device
-            if current_selected_sink:
-                for i, sink_name in enumerate(profile_sinks):
-                    if sink_name == current_selected_sink:
-                        selected_index = i
-                        print(f"Refresh: Restored selection to device {i} ({profiles[i]})")
-                        break
-                else:
-                    print(f"Refresh: Previously selected device '{current_selected_sink}' no longer available")
-            
-            # If we couldn't restore previous selection, try to find a RUNNING device
-            if selected_index == 0 and last_selected_sink:
-                try:
-                    result = subprocess.run(
-                        "pactl list sinks short | grep -v ladspa",
-                        shell=True, capture_output=True, text=True
-                    )
-                    if result.returncode == 0:
-                        for line in result.stdout.strip().split('\n'):
-                            if 'RUNNING' in line:
-                                parts = line.split('\t')
-                                if len(parts) >= 2:
-                                    running_sink = parts[1]
-                                    for i, sink_name in enumerate(profile_sinks):
-                                        if sink_name == running_sink:
-                                            selected_index = i
-                                            last_selected_sink = running_sink
-                                            print(f"Refresh: Found RUNNING device {i} ({profiles[i]})")
-                                            break
-                                    break
-                except Exception as e:
-                    print(f"Warning: Error finding running device during refresh: {e}")
-            
-            self.outputbox.set_active(selected_index)
-        
-        print(f"Refreshed output devices: {num_profiles} devices found")
-
-    def on_resetsettings(self, action=None, param=None):
-        print('Resetting to defaults...')
-        os.system('pulseaudio-equalizer interface.resetsettings')
-        GetSettings()
-
-        self.lookup_action('eqenabled').set_state(GLib.Variant('b', status))
-        Gio.Application.get_default().lookup_action('keepsettings').set_state(GLib.Variant('b', persistence))
-        self.presetsbox.get_child().set_text(preset)
-        for i in range(num_ladspa_controls):
-            self.scales[i].set_value(float(ladspa_controls[i]))
-            self.labels[i].set_frequency(ladspa_inputs[i])
-            self.scalevalues[i].set_markup('<small>' + str(float(ladspa_controls[i])) + '\ndB</small>')
-
-    def on_savepreset(self, action, param):
-        global preset
-        global presetmatch
-        preset = self.presetsbox.get_child().get_text()
-        if preset == '' or presetmatch == 1:
-            print('Invalid preset name')
-        else:
-            # Write preset data to file
-            with open(os.path.join(USER_PRESET_DIR, preset + '.preset'), 'w') as f:
-                data = [
-                    str(ladspa_filename), str(ladspa_name), str(ladspa_label),
-                    '', str(preset), str(num_ladspa_controls),
-                    *map(str, ladspa_controls), *map(str, ladspa_inputs)
-                ]
-                f.write('\n'.join(data) + '\n')
-
-            # Clear preset list from ComboBox
-            self.presetsbox.remove_all()
-
-            # Apply settings (which will save new preset as default)
-            ApplySettings()
-
-            # Refresh (and therefore, sort) preset list
-            GetSettings()
-
-            # Repopulate preset list into ComboBox
-            for i in range(len(rawpresets)):
-                self.presetsbox.append_text(rawpresets[i])
-
-            action.set_enabled(False)
-            self.lookup_action('remove').set_enabled(True)
-
-    def on_eqenabled(self, action, state):
-        global status
-        status = int(state.get_boolean())
-        ApplySettings()
-        action.set_state(state)
-
-    def on_removepreset(self, action, param):
-        global preset
-        os.remove(os.path.join(USER_PRESET_DIR, preset + '.preset'))
-
-        self.presetsbox.get_child().set_text('')
-
-        # Clear preset list from ComboBox
-        self.presetsbox.remove_all()
-
-        # Refresh (and therefore, sort) preset list
-        GetSettings()
-
-        # Repopulate preset list into ComboBox
-        for i in range(len(rawpresets)):
-            self.presetsbox.append_text(rawpresets[i])
-
-        preset = ''
-        # Apply settings
-        ApplySettings()
-
-        action.set_enabled(False)
-
-    def __init__(self, *args, **kwargs):
-        super(Equalizer, self).__init__(*args, **kwargs)
-        GetSettings()
-        InitializeCurrentOutput()  # Initialize the current output device
-
-        self.apply_event_source = None
-
-        # Equalizer bands
-        global scale
-        self.scales = {}
-        self.labels = {}
-        self.scalevalues = {}
-        for x in range(num_ladspa_controls):
-            scale = Gtk.Scale(orientation=Gtk.Orientation.VERTICAL,
-                              draw_value=False, inverted=True, digits=1,
-                              expand=True, visible=True)
+        for x in range(self._state.num_ladspa_controls):
+            scale = Gtk.Scale(
+                orientation=Gtk.Orientation.VERTICAL,
+                draw_value=False, inverted=True, digits=1,
+                expand=True, visible=True,
+            )
             self.scales[x] = scale
-            scale.set_range(float(ranges[0]), float(ranges[1]))
+            scale.set_range(float(self._state.ranges[0]), float(self._state.ranges[1]))
             scale.set_increments(1, 0.1)
             scale.set_size_request(35, 200)
-            scale.set_value(float(ladspa_controls[x]))
-            scale.connect('value-changed', self.on_scale, x)
-            label = FrequencyLabel(frequency = ladspa_inputs[x])
+            scale.set_value(self._state.ladspa_controls[x])
+            scale.connect('value-changed', self._on_scale, x)
+
+            label = FrequencyLabel(frequency=self._state.ladspa_inputs[x])
             self.labels[x] = label
-            scalevalue = Gtk.Label(visible=True, use_markup=True,
-                label='<small>' + str(scale.get_value())  + '\ndB</small>')
+
+            scalevalue = Gtk.Label(
+                visible=True, use_markup=True,
+                label=f'<small>{scale.get_value():g}\ndB</small>',
+            )
             self.scalevalues[x] = scalevalue
+
             self.grid.attach(label, x, 0, 1, 1)
             self.grid.attach(scale, x, 1, 1, 2)
             self.grid.attach(scalevalue, x, 3, 1, 1)
 
         action = Gio.SimpleAction.new('save', None)
         action.set_enabled(False)
-        action.connect('activate', self.on_savepreset)
+        action.connect('activate', self._on_savepreset)
         self.add_action(action)
 
         action = Gio.SimpleAction.new('remove', None)
         action.set_enabled(False)
-        action.connect('activate', self.on_removepreset)
+        action.connect('activate', self._on_removepreset)
         self.add_action(action)
 
-        self.presetsbox.get_child().set_text(preset)
-        for i in range(len(rawpresets)):
-            self.presetsbox.append_text(rawpresets[i])
+        self.presetsbox.get_child().set_text(self._state.preset)
+        for p in self._state.rawpresets:
+            self.presetsbox.append_text(p)
 
-        action = Gio.SimpleAction.new_stateful('eqenabled', None,
-                                               GLib.Variant('b', status))
-        action.connect('change-state', self.on_eqenabled)
+        action = Gio.SimpleAction.new_stateful(
+            'eqenabled', None, GLib.Variant('b', self._state.status)
+        )
+        action.connect('change-state', self._on_eqenabled)
         self.add_action(action)
 
-        # Initialize output devices
-        GetOutputDevices()
-        for profile in profiles:
+        get_output_devices(self._state)
+        for profile in self._state.profiles:
             self.outputbox.append_text(profile)
-        
-        # Set the active device based on RUNNING sink detection
-        if num_profiles > 0:
-            global last_selected_sink
-            selected_index = 0  # Default to first device
-            
-            # If we detected a running sink during initialization, try to select it
-            if last_selected_sink and last_selected_sink != "default":
-                try:
-                    # Find which device corresponds to our detected running sink
-                    for i, sink_name in enumerate(profile_sinks):
-                        if sink_name == last_selected_sink:
-                            selected_index = i
-                            print(f"GUI: Selecting device {i} ({profiles[i]}) for running sink {last_selected_sink}")
-                            break
-                    else:
-                        # If the detected sink isn't in our list, find RUNNING sink directly
+
+        if self._state.num_profiles > 0:
+            selected_index = 0
+            if self._state.last_selected_sink and self._state.last_selected_sink != 'default':
+                for i, sink_name in enumerate(self._state.profile_sinks):
+                    if sink_name == self._state.last_selected_sink:
+                        selected_index = i
+                        break
+                else:
+                    import subprocess
+                    try:
                         result = subprocess.run(
                             "pactl list sinks short | grep -v ladspa",
-                            shell=True, capture_output=True, text=True
+                            shell=True, capture_output=True, text=True, timeout=10,
                         )
                         if result.returncode == 0:
                             for line in result.stdout.strip().split('\n'):
@@ -608,62 +128,244 @@ class Equalizer(Gtk.ApplicationWindow):
                                     parts = line.split('\t')
                                     if len(parts) >= 2:
                                         running_sink = parts[1]
-                                        for i, sink_name in enumerate(profile_sinks):
+                                        for i, sink_name in enumerate(self._state.profile_sinks):
                                             if sink_name == running_sink:
                                                 selected_index = i
-                                                last_selected_sink = running_sink
-                                                print(f"GUI: Found RUNNING sink {running_sink}, selecting device {i} ({profiles[i]})")
+                                                self._state.last_selected_sink = running_sink
                                                 break
                                         break
-                except Exception as e:
-                    print(f"Warning: Error selecting running device: {e}")
-            
+                    except Exception as e:
+                        print(f"Warning: Error selecting running device: {e}")
+
             self.outputbox.set_active(selected_index)
 
         self.show()
 
+    def _on_scale(self, widget: Gtk.Scale, index: int) -> None:
+        self._state.ladspa_controls[index] = round(widget.get_value(), 1)
+        if self._state.clearpreset == 1:
+            self._state.preset = ''
+            self.presetsbox.get_child().set_text('')
+
+        self.scalevalues[index].set_markup(
+            f'<small>{self._state.ladspa_controls[index]:g}\ndB</small>'
+        )
+
+        if self.apply_event_source is not None:
+            GLib.source_remove(self.apply_event_source)
+
+        self.apply_event_source = GLib.timeout_add(500, self._on_apply_event)
+
+    def _on_apply_event(self) -> bool:
+        apply_settings(self._state)
+        self.apply_event_source = None
+        return False
+
+    @Gtk.Template.Callback()
+    def on_presetsbox(self, widget: Gtk.ComboBoxText) -> None:
+        preset = self.presetsbox.get_child().get_text()
+        self._state.preset = preset
+
+        self.lookup_action('remove').set_enabled(False)
+
+        self._state.presetmatch = ''
+        for p in self._state.rawpresets:
+            if p == preset:
+                self._state.presetmatch = '1'
+
+        if self._state.presetmatch == '1' and load_preset(preset, self._state):
+            path = USER_PRESET_DIR / f'{preset}.preset'
+            if path.is_file():
+                self.lookup_action('remove').set_enabled(True)
+
+            self._state.clearpreset = ''
+            for i in range(self._state.num_ladspa_controls):
+                self.scales[i].set_value(self._state.ladspa_controls[i])
+                self.labels[i].set_frequency(self._state.ladspa_inputs[i])
+                self.scalevalues[i].set_markup(
+                    f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
+                )
+
+            self._state.preset = preset
+            self._state.clearpreset = 1
+            self.presetsbox.get_child().set_text(preset)
+            apply_settings(self._state)
+            self.lookup_action('save').set_enabled(False)
+        else:
+            self.lookup_action('save').set_enabled(preset != '')
+
+    @Gtk.Template.Callback()
+    def on_outputbox(self, widget: Gtk.ComboBoxText) -> None:
+        selected_index = widget.get_active()
+        if selected_index == -1 or selected_index >= self._state.num_profiles:
+            return
+
+        selected_profile = self._state.profiles[selected_index]
+        selected_sink = self._state.profile_sinks[selected_index] \
+            if selected_index < len(self._state.profile_sinks) else 'default'
+
+        self._state.last_selected_sink = selected_sink
+        print(f'Output device changed to: {selected_profile} [sink: {selected_sink}]')
+
+        if selected_sink != 'default':
+            if switch_output(self._state, selected_sink):
+                get_settings(self._state)
+                self.lookup_action('eqenabled').set_state(
+                    GLib.Variant('b', self._state.status)
+                )
+                for i in range(self._state.num_ladspa_controls):
+                    self.scales[i].set_value(self._state.ladspa_controls[i])
+                    self.scalevalues[i].set_markup(
+                        f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
+                    )
+
+    @Gtk.Template.Callback()
+    def on_refresh_outputs(self, widget: Gtk.Widget) -> None:
+        current_index = self.outputbox.get_active()
+        current_sink = None
+        if 0 <= current_index < len(self._state.profile_sinks):
+            current_sink = self._state.profile_sinks[current_index]
+            self._state.last_selected_sink = current_sink
+
+        get_output_devices(self._state)
+
+        self.outputbox.remove_all()
+        for profile in self._state.profiles:
+            self.outputbox.append_text(profile)
+
+        if self._state.num_profiles > 0:
+            selected_index = 0
+            if current_sink:
+                for i, sink_name in enumerate(self._state.profile_sinks):
+                    if sink_name == current_sink:
+                        selected_index = i
+                        break
+                else:
+                    print(f"Refresh: Previously selected device '{current_sink}' no longer available")
+
+            if selected_index == 0 and self._state.last_selected_sink:
+                import subprocess
+                try:
+                    result = subprocess.run(
+                        "pactl list sinks short | grep -v ladspa",
+                        shell=True, capture_output=True, text=True, timeout=10,
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split('\n'):
+                            if 'RUNNING' in line:
+                                parts = line.split('\t')
+                                if len(parts) >= 2:
+                                    running_sink = parts[1]
+                                    for i, sink_name in enumerate(self._state.profile_sinks):
+                                        if sink_name == running_sink:
+                                            selected_index = i
+                                            self._state.last_selected_sink = running_sink
+                                            break
+                                    break
+                except Exception as e:
+                    print(f"Warning: Error finding running device during refresh: {e}")
+
+            self.outputbox.set_active(selected_index)
+
+    def on_resetsettings(self, action: Gio.SimpleAction | None = None,
+                         param: object = None) -> None:
+        import subprocess
+        subprocess.run('pulseaudio-equalizer interface.resetsettings',
+                       shell=True, timeout=10)
+        get_settings(self._state)
+
+        self.lookup_action('eqenabled').set_state(
+            GLib.Variant('b', self._state.status)
+        )
+        Gio.Application.get_default().lookup_action('keepsettings').set_state(
+            GLib.Variant('b', self._state.persistence)
+        )
+        self.presetsbox.get_child().set_text(self._state.preset)
+        for i in range(self._state.num_ladspa_controls):
+            self.scales[i].set_value(self._state.ladspa_controls[i])
+            self.labels[i].set_frequency(self._state.ladspa_inputs[i])
+            self.scalevalues[i].set_markup(
+                f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
+            )
+
+    def _on_savepreset(self, action: Gio.SimpleAction, param: object) -> None:
+        preset = self.presetsbox.get_child().get_text()
+        if not preset or self._state.presetmatch == '1':
+            print('Invalid preset name')
+            return
+
+        save_preset(preset, self._state)
+
+        self.presetsbox.remove_all()
+        apply_settings(self._state)
+        get_settings(self._state)
+
+        for p in self._state.rawpresets:
+            self.presetsbox.append_text(p)
+
+        action.set_enabled(False)
+        self.lookup_action('remove').set_enabled(True)
+
+    def _on_eqenabled(self, action: Gio.SimpleAction, state: GLib.Variant) -> None:
+        self._state.status = int(state.get_boolean())
+        apply_settings(self._state)
+        action.set_state(state)
+
+    def _on_removepreset(self, action: Gio.SimpleAction, param: object) -> None:
+        remove_preset(self._state.preset)
+
+        self.presetsbox.get_child().set_text('')
+        self.presetsbox.remove_all()
+        get_settings(self._state)
+
+        for p in self._state.rawpresets:
+            self.presetsbox.append_text(p)
+
+        self._state.preset = ''
+        apply_settings(self._state)
+        action.set_enabled(False)
+
 
 class Application(Gtk.Application):
-
-    def __init__(self, *args, **kwargs):
-        super(Application, self).__init__(*args,
+    def __init__(self, **kwargs):
+        super().__init__(
             application_id='com.github.pulseaudio-equalizer-ladspa.Equalizer',
             resource_base_path='/com/github/pulseaudio-equalizer-ladspa/Equalizer',
-            **kwargs)
+            **kwargs,
+        )
+        self._state = EqualizerState()
+        self._window: Equalizer | None = None
 
-        self.window = None
-
-    def do_startup(self):
+    def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
-        GetSettings()
+        get_settings(self._state)
 
-        self.window = Equalizer(application=self)
+        self._window = Equalizer(state=self._state, application=self)
 
         action = Gio.SimpleAction.new('resetsettings', None)
-        action.connect('activate', self.window.on_resetsettings)
+        action.connect('activate', self._window.on_resetsettings)
         self.add_action(action)
 
-        global persistence
-        action = Gio.SimpleAction.new_stateful('keepsettings', None,
-                                               GLib.Variant('b', persistence))
-        action.connect('change-state', self.on_keepsettings)
+        action = Gio.SimpleAction.new_stateful(
+            'keepsettings', None, GLib.Variant('b', self._state.persistence)
+        )
+        action.connect('change-state', self._on_keepsettings)
         self.add_action(action)
 
         action = Gio.SimpleAction.new('quit', None)
-        action.connect('activate', self.on_quit)
+        action.connect('activate', self._on_quit)
         self.add_action(action)
 
-    def do_activate(self):
-        if not self.window:
-            self.window = Equalizer(application=self)
+    def do_activate(self) -> None:
+        if not self._window:
+            self._window = Equalizer(state=self._state, application=self)
+        self._window.present()
 
-        self.window.present()
-
-    def on_keepsettings(self, action, state):
-        global persistence
-        persistence = int(state.get_boolean())
-        ApplySettings()
+    def _on_keepsettings(self, action: Gio.SimpleAction, state: GLib.Variant) -> None:
+        self._state.persistence = int(state.get_boolean())
+        apply_settings(self._state)
         action.set_state(state)
 
-    def on_quit(self, action, param):
+    @staticmethod
+    def _on_quit(action: Gio.SimpleAction, param: object) -> None:
         Gio.Application.get_default().quit()

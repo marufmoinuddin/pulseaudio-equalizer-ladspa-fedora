@@ -1,71 +1,23 @@
-# RPM Build artifacts
+# RPM build artifacts
 rpmbuild/
 *.rpm
 *.src.rpm
 
-# Arch Linux PKGBUILD artifacts
-src/
-pkg/
-*.pkg.tar.zst
-*.pkg.tar.xz
-*.pkg.tar.gz
-*.pkg.tar.bz2
-.BUILDINFO
-.PKGINFO
-.MTREE
-
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.pyc
-*.pyo
+*.egg-info/
 
 # Build directories
 build/
-dist/
-*.egg-info/
-pkg/
-pulseaudio-equalizer-ladspa*/
-
-# Meson build directories
 builddir/
 *-build/
+dist/
 
-# Temporary files
+# Temp / backup
+*~
 *.tmp
 *.temp
-*~
-.#*
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Log files
-*.log
-
-# Backup files
 *.bak
-*.backup
 *.orig
-
-# Archive files (except source tarballs needed for building)
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.zip
-!pulseaudio-equalizer-ladspa-*.tar.gz
-!*-source.tar.*
-!create-archive.sh
-!README-Arch.md
-
-# Local configuration
-.env
-.local
+*.log

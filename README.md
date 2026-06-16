@@ -66,7 +66,6 @@ When auto-start is enabled, the LADSPA equalizer will:
 
 ### Runtime Requirements
 - `bash` - Shell scripting
-- `bc` - Basic calculator for audio math
 - `glib2` - GLib library
 - `gtk3` - GTK3 GUI toolkit
 - `pipewire-pulseaudio` - PipeWire with PulseAudio compatibility
@@ -75,11 +74,9 @@ When auto-start is enabled, the LADSPA equalizer will:
 - `ladspa-swh-plugins` - SWH LADSPA plugins collection
 
 ### Build Dependencies  
-- `meson >= 0.46.0` - Build system
+- `meson >= 0.63.0` - Build system
 - `ninja-build` - Ninja build tool
-- `git` - Version control
 - `python3-devel` - Python development headers
-- `python3-setuptools` - Python setuptools
 
 ## ✨ Recent Improvements (v2.8.1)
 
