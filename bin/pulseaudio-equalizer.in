@@ -86,11 +86,11 @@ case "${1:-}" in
 
     "disable")
         echo "Disabling LADSPA equalizer..."
-        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1)
+        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1) || true
         if [ -n "$MODULE_ID" ]; then
             pactl unload-module "$MODULE_ID"
-            DEFAULT_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)
-            pactl set-default-sink "$DEFAULT_SINK"
+            DEFAULT_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2) || true
+            [ -n "$DEFAULT_SINK" ] && pactl set-default-sink "$DEFAULT_SINK"
             echo "LADSPA equalizer disabled"
         else
             echo "No LADSPA equalizer module found"
@@ -217,7 +217,7 @@ case "${1:-}" in
         CURRENT_CONTROLS=$(read_controls_from_config)
         [ -z "$CURRENT_CONTROLS" ] && CURRENT_CONTROLS="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0"
 
-        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "$MBEQ_LABEL" | cut -f1)
+        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "$MBEQ_LABEL" | cut -f1) || true
         if [ -n "$MODULE_ID" ]; then
             CURRENT_MASTER=$(pactl list modules \
                 | grep -A 20 "Name: module-ladspa-sink" \
@@ -227,8 +227,13 @@ case "${1:-}" in
             pactl unload-module "$MODULE_ID"
             MASTER_SINK="$CURRENT_MASTER"
         else
-            MASTER_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)
-            echo "No existing module found, using: $MASTER_SINK"
+            MASTER_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2) || true
+            echo "No existing module found, using: ${MASTER_SINK:-<none>}"
+        fi
+
+        if [ -z "${MASTER_SINK:-}" ]; then
+            echo "No available output sink found, cannot load equalizer" >&2
+            exit 1
         fi
 
         if ! reload_ladspa "$MASTER_SINK" "$CURRENT_CONTROLS"; then
@@ -241,10 +246,14 @@ case "${1:-}" in
 
     "interface.resetsettings")
         echo "Resetting LADSPA equalizer to flat..."
-        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "$MBEQ_LABEL" | cut -f1)
+        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "$MBEQ_LABEL" | cut -f1) || true
         if [ -n "$MODULE_ID" ]; then
             pactl unload-module "$MODULE_ID"
-            MASTER=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)
+            MASTER=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2) || true
+            if [ -z "${MASTER:-}" ]; then
+                echo "No available output sink found for reset" >&2
+                exit 1
+            fi
             if ! reload_ladspa "$MASTER" "0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0"; then
                 echo "Failed to reload module during reset" >&2
                 exit 1
@@ -257,14 +266,19 @@ case "${1:-}" in
     "update-output")
         NEW_MASTER_SINK="${2:-}"
         if [ -z "$NEW_MASTER_SINK" ]; then
-            NEW_MASTER_SINK=$(pactl list sinks short | grep -v ladspa | grep RUNNING | head -1 | cut -f2)
-            [ -z "$NEW_MASTER_SINK" ] && NEW_MASTER_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2)
-            echo "Auto-detected target sink: $NEW_MASTER_SINK"
+            NEW_MASTER_SINK=$(pactl list sinks short | grep -v ladspa | grep RUNNING | head -1 | cut -f2) || true
+            [ -z "$NEW_MASTER_SINK" ] && NEW_MASTER_SINK=$(pactl list sinks short | grep -v ladspa | head -1 | cut -f2) || true
+            echo "Auto-detected target sink: ${NEW_MASTER_SINK:-<none>}"
         else
             echo "Using specified target sink: $NEW_MASTER_SINK"
         fi
 
-        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1)
+        if [ -z "${NEW_MASTER_SINK:-}" ]; then
+            echo "No available output sink found for update-output" >&2
+            exit 1
+        fi
+
+        MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "mbeq" | cut -f1) || true
         if [ -z "$MODULE_ID" ]; then
             echo "Equalizer is not currently enabled"
             exit 0

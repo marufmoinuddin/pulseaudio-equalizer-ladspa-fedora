@@ -19,12 +19,9 @@ if [ ! -f "$SPEC_FILE" ]; then
     exit 1
 fi
 
-# Derive version from the spec file itself so we don't hardcode it
-VERSION=$(rpmspec --query --queryformat '%{VERSION}\n' "$SPEC_FILE" 2>/dev/null)
-if [ -z "$VERSION" ]; then
-    echo "Error: could not extract version from $SPEC_FILE" >&2
-    exit 1
-fi
+# Derive version from git commit hash
+GIT_HASH=$(git rev-parse --short HEAD)
+VERSION="g${GIT_HASH}"
 
 echo "Building $PACKAGE_NAME version $VERSION"
 echo ""
@@ -48,8 +45,8 @@ echo "Creating source archive: $SOURCE_FILE"
 git archive --prefix="${PACKAGE_NAME}-${VERSION}-pipewire/" \
     -o ~/rpmbuild/SOURCES/"$SOURCE_FILE" HEAD
 
-# Copy spec file
-cp "$SPEC_FILE" ~/rpmbuild/SPECS/
+# Copy spec file and inject the git-based version
+sed "s/^Version:.*/Version:        ${VERSION}/" "$SPEC_FILE" > ~/rpmbuild/SPECS/"$SPEC_FILE"
 
 # Install build dependencies from spec
 sudo dnf builddep -y ~/rpmbuild/SPECS/"$SPEC_FILE"
