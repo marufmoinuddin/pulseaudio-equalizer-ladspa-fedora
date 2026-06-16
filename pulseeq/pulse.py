@@ -142,7 +142,13 @@ def apply_settings(state: EqualizerState) -> None:
     ]
     CONFIG_FILE.write_text('\n'.join(data) + '\n')
 
-    _run('pulseaudio-equalizer interface.applysettings')
+    if state.status:
+        _run('pulseaudio-equalizer interface.applysettings')
+    else:
+        _run('pulseaudio-equalizer disable')
+
+    if not state.status:
+        return
 
     if state.last_selected_sink and state.last_selected_sink != 'default':
         print(f'Restoring output to: {state.last_selected_sink}')
