@@ -64,11 +64,16 @@ print(f'OK: pulseeq modules (plugin={state.mbeq_plugin})')
 %{_bindir}/pulseaudio-equalizer-autostart
 %{_datadir}/%{name}/
 %{_datadir}/applications/com.github.pulseaudio-equalizer-ladspa.Equalizer.desktop
+%{_datadir}/icons/hicolor/scalable/apps/pulseaudio-equalizer-ladspa.svg
 %{_userunitdir}/pulseaudio-equalizer.service
 %{python3_sitelib}/pulseeq/
 
 %post
 %systemd_user_post pulseaudio-equalizer.service
+gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor 2>/dev/null || :
+
+%postun
+gtk-update-icon-cache -q -t -f %{_datadir}/icons/hicolor 2>/dev/null || :
 
 %preun
 %systemd_user_preun pulseaudio-equalizer.service

@@ -39,11 +39,12 @@ rpmdev-setuptree 2>/dev/null || {
     mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 }
 
-# Create source tarball from git (only tracked files, clean)
+# Create source tarball from working tree (includes uncommitted, excludes gitignored)
 SOURCE_FILE="${PACKAGE_NAME}-${VERSION}.tar.gz"
 echo "Creating source archive: $SOURCE_FILE"
-git archive --prefix="${PACKAGE_NAME}-${VERSION}-pipewire/" \
-    -o ~/rpmbuild/SOURCES/"$SOURCE_FILE" HEAD
+git ls-files -z --cached --others --exclude-standard \
+  | xargs -0 -r tar czf ~/rpmbuild/SOURCES/"$SOURCE_FILE" \
+    --transform "s|^|${PACKAGE_NAME}-${VERSION}-pipewire/|"
 
 # Copy spec file and inject the git-based version
 sed "s/^Version:.*/Version:        ${VERSION}/" "$SPEC_FILE" > ~/rpmbuild/SPECS/"$SPEC_FILE"

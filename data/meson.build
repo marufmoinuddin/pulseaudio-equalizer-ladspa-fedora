@@ -1,5 +1,9 @@
 install_subdir('presets', install_dir: pkgdatadir)
 
+install_data('icons/pulseaudio-equalizer-ladspa.svg',
+    install_dir: join_paths(datadir, 'icons', 'hicolor', 'scalable', 'apps'),
+)
+
 install_data(appid + '.desktop',
     install_dir: join_paths(datadir, 'applications'),
 )
