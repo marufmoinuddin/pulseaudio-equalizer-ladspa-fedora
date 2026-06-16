@@ -5,7 +5,8 @@ import sys
 import gi
 gi.check_version('3.30')
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gio, GLib
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gtk, Gio, GLib, Gdk
 
 from pulseeq.pulse import (
     EqualizerState,
@@ -335,9 +336,13 @@ class Equalizer(Gtk.ApplicationWindow):
 
 
 class Application(Gtk.Application):
+    APP_ID = 'com.github.pulseaudio-equalizer-ladspa.Equalizer'
+
     def __init__(self, **kwargs):
+        GLib.set_prgname(self.APP_ID)
+        Gdk.set_program_class(self.APP_ID)
         super().__init__(
-            application_id='com.github.pulseaudio-equalizer-ladspa.Equalizer',
+            application_id=self.APP_ID,
             resource_base_path='/com/github/pulseaudio-equalizer-ladspa/Equalizer',
             **kwargs,
         )
