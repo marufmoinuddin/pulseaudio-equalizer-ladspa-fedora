@@ -18,6 +18,8 @@ from pulseeq.pulse import (
 from pulseeq.presets import load_preset, save_preset, remove_preset
 from pulseeq.constants import USER_PRESET_DIR, SYSTEM_PRESET_DIR
 
+TEMPLATE_PATH = '/com/github/pulseaudio-equalizer-ladspa/Equalizer/ui/Equalizer.ui'
+
 
 class FrequencyLabel(Gtk.Label):
     def __init__(self, frequency: float | None = None, **kwargs):
@@ -38,18 +40,27 @@ class FrequencyLabel(Gtk.Label):
         self.set_label(f'<small>{freq:g}\n{suffix}</small>')
 
 
-@Gtk.Template(resource_path='/com/github/pulseaudio-equalizer-ladspa/Equalizer/ui/Equalizer.ui')
 class Equalizer(Gtk.ApplicationWindow):
     __gtype_name__ = 'Equalizer'
 
     grid: Gtk.Grid = Gtk.Template.Child()
     presetsbox: Gtk.ComboBoxText = Gtk.Template.Child()
     outputbox: Gtk.ComboBoxText = Gtk.Template.Child()
+    refresh_button: Gtk.Button = Gtk.Template.Child()
 
     def __init__(self, state: EqualizerState, **kwargs):
+        cls = type(self)
+        if not getattr(cls, '_template_ready', False):
+            Gtk.Template(resource_path=TEMPLATE_PATH)(cls)
+            cls._template_ready = True
+
         self._state = state
         self.apply_event_source: int | None = None
         super().__init__(**kwargs)
+
+        self.presetsbox.connect('changed', self.on_presetsbox)
+        self.outputbox.connect('changed', self.on_outputbox)
+        self.refresh_button.connect('clicked', self.on_refresh_outputs)
 
         get_settings(self._state)
         initialize_current_output(self._state)
@@ -161,7 +172,6 @@ class Equalizer(Gtk.ApplicationWindow):
         self.apply_event_source = None
         return False
 
-    @Gtk.Template.Callback()
     def on_presetsbox(self, widget: Gtk.ComboBoxText) -> None:
         preset = self.presetsbox.get_child().get_text()
         self._state.preset = preset
@@ -194,7 +204,6 @@ class Equalizer(Gtk.ApplicationWindow):
         else:
             self.lookup_action('save').set_enabled(preset != '')
 
-    @Gtk.Template.Callback()
     def on_outputbox(self, widget: Gtk.ComboBoxText) -> None:
         selected_index = widget.get_active()
         if selected_index == -1 or selected_index >= self._state.num_profiles:
@@ -219,7 +228,6 @@ class Equalizer(Gtk.ApplicationWindow):
                         f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
                     )
 
-    @Gtk.Template.Callback()
     def on_refresh_outputs(self, widget: Gtk.Widget) -> None:
         current_index = self.outputbox.get_active()
         current_sink = None
