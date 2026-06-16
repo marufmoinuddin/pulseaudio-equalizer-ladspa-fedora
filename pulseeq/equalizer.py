@@ -62,6 +62,17 @@ class Equalizer(Gtk.ApplicationWindow):
         self.outputbox.connect('changed', self.on_outputbox)
         self.refresh_button.connect('clicked', self.on_refresh_outputs)
 
+        reset_all_btn = Gtk.Button(
+            tooltip_text='Reset all bands to 0 dB', visible=True,
+        )
+        reset_all_btn.add(Gtk.Image(icon_name='edit-undo-symbolic', visible=True))
+        reset_all_btn.connect('clicked', self._on_reset_all)
+        self.refresh_button.get_parent().pack_start(reset_all_btn, False, False, 0)
+
+        self.grid.set_hexpand(True)
+        self.grid.set_vexpand(True)
+        self.grid.get_parent().set_child_packing(self.grid, True, True, 0, Gtk.PackType.START)
+
         get_settings(self._state)
         initialize_current_output(self._state)
 
@@ -78,11 +89,15 @@ class Equalizer(Gtk.ApplicationWindow):
             self.scales[x] = scale
             scale.set_range(float(self._state.ranges[0]), float(self._state.ranges[1]))
             scale.set_increments(1, 0.1)
-            scale.set_size_request(35, 200)
+            scale.set_size_request(45, 220)
             scale.set_value(self._state.ladspa_controls[x])
+            freq = self._state.ladspa_inputs[x]
+            if freq:
+                freq_display = f'{float(freq):g}KHz' if float(freq) > 999 else f'{float(freq):g}Hz'
+                scale.set_tooltip_text(f'{freq_display}')
             scale.connect('value-changed', self._on_scale, x)
 
-            label = FrequencyLabel(frequency=self._state.ladspa_inputs[x])
+            label = FrequencyLabel(frequency=freq)
             self.labels[x] = label
 
             scalevalue = Gtk.Label(
@@ -153,13 +168,14 @@ class Equalizer(Gtk.ApplicationWindow):
         self.show()
 
     def _on_scale(self, widget: Gtk.Scale, index: int) -> None:
-        self._state.ladspa_controls[index] = round(widget.get_value(), 1)
+        value = round(widget.get_value(), 1)
+        self._state.ladspa_controls[index] = value
         if self._state.clearpreset == 1:
             self._state.preset = ''
             self.presetsbox.get_child().set_text('')
 
         self.scalevalues[index].set_markup(
-            f'<small>{self._state.ladspa_controls[index]:g}\ndB</small>'
+            f'<small>{value:g}\ndB</small>'
         )
 
         if self.apply_event_source is not None:
@@ -171,6 +187,9 @@ class Equalizer(Gtk.ApplicationWindow):
         apply_settings(self._state)
         self.apply_event_source = None
         return False
+
+    def _on_reset_all(self, button: Gtk.Button) -> None:
+        self.on_resetsettings()
 
     def on_presetsbox(self, widget: Gtk.ComboBoxText) -> None:
         preset = self.presetsbox.get_child().get_text()
