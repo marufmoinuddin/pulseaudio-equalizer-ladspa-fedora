@@ -63,6 +63,7 @@ class Equalizer(Gtk.ApplicationWindow):
         self.outputbox.connect('changed', self.on_outputbox)
         self.refresh_button.connect('clicked', self.on_refresh_outputs)
 
+        self._initialized = False
         get_settings(self._state)
         initialize_current_output(self._state)
 
@@ -151,6 +152,7 @@ class Equalizer(Gtk.ApplicationWindow):
 
             self.outputbox.set_active(selected_index)
 
+        self._initialized = True
         self.show()
 
     def _on_scale(self, widget: Gtk.Scale, index: int) -> None:
@@ -206,6 +208,8 @@ class Equalizer(Gtk.ApplicationWindow):
             self.lookup_action('save').set_enabled(preset != '')
 
     def on_outputbox(self, widget: Gtk.ComboBoxText) -> None:
+        if not self._initialized:
+            return
         selected_index = widget.get_active()
         if selected_index == -1 or selected_index >= self._state.num_profiles:
             return

@@ -47,9 +47,10 @@ CONFIG_NAME="$CONFIG_DIR/equalizerrc"
 # Helpers
 # ---------------------------------------------------------------
 read_controls_from_config() {
+    [ ! -f "$CONFIG_NAME" ] && return 0
     local line_num=11 i value out=""
     for i in $(seq 1 15); do
-        value=$(sed -n "${line_num}p" "$CONFIG_NAME" 2>/dev/null)
+        value=$(sed -n "${line_num}p" "$CONFIG_NAME" 2>/dev/null) || true
         if [ -z "$out" ]; then
             out="$value"
         else
@@ -195,7 +196,7 @@ case "${1:-}" in
         echo "+30"
         echo "num_ladspa_controls=15"
 
-        CURRENT_CONTROLS=$(read_controls_from_config)
+        CURRENT_CONTROLS=$(read_controls_from_config) || true
         echo "ladspa_controls=${CURRENT_CONTROLS:-0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0}"
 
         # Frequency inputs (lines 26-40)
@@ -214,7 +215,7 @@ case "${1:-}" in
         ;;
 
     "interface.applysettings")
-        CURRENT_CONTROLS=$(read_controls_from_config)
+        CURRENT_CONTROLS=$(read_controls_from_config) || true
         [ -z "$CURRENT_CONTROLS" ] && CURRENT_CONTROLS="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0"
 
         MODULE_ID=$(pactl list modules short | grep "module-ladspa-sink" | grep "$MBEQ_LABEL" | cut -f1) || true
@@ -284,7 +285,7 @@ case "${1:-}" in
             exit 0
         fi
 
-        CURRENT_CONTROLS=$(read_controls_from_config)
+        CURRENT_CONTROLS=$(read_controls_from_config) || true
         [ -z "$CURRENT_CONTROLS" ] && CURRENT_CONTROLS="-3.0,2.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0"
 
         echo "Unloading current equalizer module..."
