@@ -53,6 +53,7 @@ class EqualizerState:
     profiles: list[str] = field(default_factory=list)
     profile_sinks: list[str] = field(default_factory=list)
     last_selected_sink: Optional[str] = None
+    current_active_sink: Optional[str] = None
 
     rawpresets: list[str] = field(default_factory=list)
 
@@ -102,32 +103,45 @@ def get_settings(state: EqualizerState) -> None:
 def initialize_current_output(state: EqualizerState) -> None:
     """Detect the currently running non-LADSPA sink and store it."""
     try:
+        # Check if LADSPA module is loaded and extract its master sink
         result = _run(
             "pactl list modules | grep -A 20 'module-ladspa-sink' | "
-            "grep 'master=' | cut -d'=' -f2 | cut -d' ' -f1"
+            "grep 'sink_master=' | head -1"
         )
         if result.returncode == 0 and result.stdout.strip():
-            state.last_selected_sink = result.stdout.strip()
-            return
+            m = re.search(r'sink_master=(\S+)', result.stdout)
+            if m:
+                master = m.group(1)
+                state.last_selected_sink = master
+                state.current_active_sink = master
+                print(f"Init: detected master sink from equalizer: {master}")
+                return
 
+        # No equalizer running; find currently RUNNING non-ladspa sink
         result = _run("pactl list sinks short | grep -v ladspa")
         if result.returncode == 0 and result.stdout.strip():
             for line in result.stdout.strip().split('\n'):
                 if 'RUNNING' in line:
                     parts = line.split('\t')
                     if len(parts) >= 2:
-                        state.last_selected_sink = parts[1]
+                        sink = parts[1]
+                        state.last_selected_sink = sink
+                        state.current_active_sink = sink
                         return
 
             first_line = result.stdout.strip().split('\n')[0]
             parts = first_line.split('\t')
             if len(parts) >= 2:
-                state.last_selected_sink = parts[1]
+                sink = parts[1]
+                state.last_selected_sink = sink
+                state.current_active_sink = sink
         else:
             state.last_selected_sink = None
+            state.current_active_sink = None
     except Exception as e:
         print(f"Error detecting current output device: {e}")
         state.last_selected_sink = None
+        state.current_active_sink = None
 
 
 def apply_settings(state: EqualizerState) -> None:
@@ -158,10 +172,12 @@ def apply_settings(state: EqualizerState) -> None:
                 f"pulseaudio-equalizer update-output {shlex.quote(state.last_selected_sink)}"
             )
             if result.returncode == 0:
+                state.current_active_sink = state.last_selected_sink
                 print(f"Successfully restored output to: {state.last_selected_sink}")
             else:
                 print(f"Warning: Could not restore output device: {result.stderr}")
                 _pactl(f"pactl set-default-sink {shlex.quote(state.last_selected_sink)}")
+                state.current_active_sink = state.last_selected_sink
                 print(f"Fallback: Set default sink to {state.last_selected_sink}")
         except Exception as e:
             print(f"Warning: Error restoring output device: {e}")
@@ -170,35 +186,29 @@ def apply_settings(state: EqualizerState) -> None:
 
 
 def get_output_devices(state: EqualizerState) -> None:
-    """Enumerate non-LADSPA sinks and populate *state* with profiles."""
+    """Enumerate non-LADSPA sinks using a single pactl call."""
     state.profiles = []
     state.profile_sinks = []
 
     try:
-        result = _pactl('pactl list sinks short')
-        if result.returncode == 0:
-            for line in result.stdout.strip().split('\n'):
-                if not line:
-                    continue
-                parts = line.split('\t')
-                if len(parts) < 2:
-                    continue
-                sink_name = parts[1]
-                if 'ladspa' in sink_name:
-                    continue
+        result = _pactl('pactl list sinks')
+        if result.returncode != 0:
+            raise Exception(f"pactl returned code {result.returncode}")
 
-                desc_result = _run(
-                    f"pactl list sinks | grep -A 20 'Name: {sink_name}' | "
-                    f"grep 'Description:' | head -1"
-                )
-                if desc_result.returncode == 0:
-                    match = re.search(r'Description: (.+)', desc_result.stdout)
-                    friendly_name = match.group(1) if match else sink_name
-                else:
-                    friendly_name = sink_name
+        sink_name = None
+        for line in result.stdout.split('\n'):
+            name_match = re.match(r'\s+Name:\s+(.+)', line)
+            if name_match and sink_name is None:
+                sink_name = name_match.group(1).strip()
+                continue
 
-                state.profiles.append(friendly_name)
+            desc_match = re.match(r'\s+Description:\s+(.+)', line)
+            if desc_match and sink_name and 'ladspa' not in sink_name:
+                state.profiles.append(desc_match.group(1).strip())
                 state.profile_sinks.append(sink_name)
+                sink_name = None
+            elif name_match and sink_name is not None:
+                sink_name = name_match.group(1).strip()
     except Exception as e:
         print(f"Error getting output devices: {e}")
 
@@ -217,6 +227,7 @@ def switch_output(state: EqualizerState, sink_name: str) -> bool:
             f"pulseaudio-equalizer update-output {shlex.quote(sink_name)}"
         )
         if result.returncode == 0:
+            state.current_active_sink = sink_name
             print(f"Successfully switched equalizer to: {sink_name}")
             return True
         else:

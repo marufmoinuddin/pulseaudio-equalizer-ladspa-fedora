@@ -22,6 +22,7 @@ from pulseeq.constants import USER_PRESET_DIR, SYSTEM_PRESET_DIR
 TEMPLATE_PATH = '/com/github/pulseaudio-equalizer-ladspa/Equalizer/ui/Equalizer.ui'
 
 
+
 class FrequencyLabel(Gtk.Label):
     def __init__(self, frequency: float | None = None, **kwargs):
         super().__init__(visible=True, use_markup=True,
@@ -117,6 +118,7 @@ class Equalizer(Gtk.ApplicationWindow):
         action.connect('change-state', self._on_eqenabled)
         self.add_action(action)
 
+        self._updating_output = True
         get_output_devices(self._state)
         for profile in self._state.profiles:
             self.outputbox.append_text(profile)
@@ -153,6 +155,8 @@ class Equalizer(Gtk.ApplicationWindow):
             self.outputbox.set_active(selected_index)
 
         self._initialized = True
+        self._updating_output = False
+        self._sync_active_sink()
         self.show()
 
     def _on_scale(self, widget: Gtk.Scale, index: int) -> None:
@@ -208,55 +212,71 @@ class Equalizer(Gtk.ApplicationWindow):
             self.lookup_action('save').set_enabled(preset != '')
 
     def on_outputbox(self, widget: Gtk.ComboBoxText) -> None:
-        if not self._initialized:
+        if not self._initialized or self._updating_output:
             return
         selected_index = widget.get_active()
         if selected_index == -1 or selected_index >= self._state.num_profiles:
             return
 
-        selected_profile = self._state.profiles[selected_index]
         selected_sink = self._state.profile_sinks[selected_index] \
             if selected_index < len(self._state.profile_sinks) else 'default'
+        if not selected_sink or selected_sink == 'default':
+            return
+
+        # Only switch if the sink actually differs from what the module is using
+        if selected_sink == self._state.current_active_sink:
+            print(f'Sink unchanged ({selected_sink}) \u2014 no switch needed')
+            return
 
         self._state.last_selected_sink = selected_sink
-        print(f'Output device changed to: {selected_profile} [sink: {selected_sink}]')
+        print(f'Output device changed to: {self._state.profiles[selected_index]} [sink: {selected_sink}]')
 
-        if selected_sink != 'default':
-            if switch_output(self._state, selected_sink):
-                get_settings(self._state)
-                self.lookup_action('eqenabled').set_state(
-                    GLib.Variant('b', self._state.status)
+        if switch_output(self._state, selected_sink):
+            get_settings(self._state)
+            self.lookup_action('eqenabled').set_state(
+                GLib.Variant('b', self._state.status)
+            )
+            for i in range(self._state.num_ladspa_controls):
+                self.scales[i].set_value(self._state.ladspa_controls[i])
+                self.scalevalues[i].set_markup(
+                    f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
                 )
-                for i in range(self._state.num_ladspa_controls):
-                    self.scales[i].set_value(self._state.ladspa_controls[i])
-                    self.scalevalues[i].set_markup(
-                        f'<small>{self._state.ladspa_controls[i]:g}\ndB</small>'
-                    )
 
     def on_refresh_outputs(self, widget: Gtk.Widget) -> None:
         current_index = self.outputbox.get_active()
-        current_sink = None
+        saved_sink = None
         if 0 <= current_index < len(self._state.profile_sinks):
-            current_sink = self._state.profile_sinks[current_index]
-            self._state.last_selected_sink = current_sink
+            saved_sink = self._state.profile_sinks[current_index]
+            self._state.last_selected_sink = saved_sink
+
+        self._updating_output = True
+        self.outputbox.handler_block_by_func(self.on_outputbox)
 
         get_output_devices(self._state)
-
         self.outputbox.remove_all()
         for profile in self._state.profiles:
             self.outputbox.append_text(profile)
 
+        selected_index = 0
         if self._state.num_profiles > 0:
-            selected_index = 0
-            if current_sink:
+            # Restore previously selected device
+            if saved_sink:
                 for i, sink_name in enumerate(self._state.profile_sinks):
-                    if sink_name == current_sink:
+                    if sink_name == saved_sink:
                         selected_index = i
                         break
                 else:
-                    print(f"Refresh: Previously selected device '{current_sink}' no longer available")
+                    print(f"Refresh: device '{saved_sink}' no longer available")
 
-            if selected_index == 0 and self._state.last_selected_sink:
+            # Fallback to current_active_sink
+            if selected_index == 0 and self._state.current_active_sink:
+                for i, sink_name in enumerate(self._state.profile_sinks):
+                    if sink_name == self._state.current_active_sink:
+                        selected_index = i
+                        break
+
+            # Last resort: find RUNNING device
+            if selected_index == 0:
                 import subprocess
                 try:
                     result = subprocess.run(
@@ -279,6 +299,26 @@ class Equalizer(Gtk.ApplicationWindow):
                     print(f"Warning: Error finding running device during refresh: {e}")
 
             self.outputbox.set_active(selected_index)
+
+        self.outputbox.handler_unblock_by_func(self.on_outputbox)
+        self._updating_output = False
+
+    def _sync_active_sink(self) -> None:
+        """Sync state.current_active_sink with what the LADSPA module is using."""
+        import subprocess, re
+        try:
+            result = subprocess.run(
+                "pactl list modules | grep -A 20 'module-ladspa-sink' | grep 'sink_master=' | head -1",
+                shell=True, capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                m = re.search(r'sink_master=(\S+)', result.stdout)
+                if m:
+                    self._state.current_active_sink = m.group(1)
+                    return
+        except Exception:
+            pass
+        self._state.current_active_sink = None
 
     def on_resetsettings(self, action: Gio.SimpleAction | None = None,
                          param: object = None) -> None:
