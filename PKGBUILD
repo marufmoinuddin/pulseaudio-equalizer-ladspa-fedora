@@ -1,12 +1,12 @@
 # Maintainer: Your Name <your@email.com>
 pkgname=pulseaudio-equalizer-ladspa
-pkgver=r59.g8433263
+pkgver=r62.g20ded37
 pkgrel=1
 pkgdesc="PulseAudio equalizer using LADSPA plugins"
 arch=('x86_64' 'aarch64')
 url="https://github.com/your/repo"
 license=('GPL')
-depends=('libpulse' 'ladspa' 'gtk3' 'glib2' 'python3')
+depends=('libpulse' 'ladspa' 'gtk3' 'glib2' 'python3' 'swh-plugins')
 makedepends=('meson' 'ninja' 'glib2' 'gtk3' 'python')
 source=("$pkgname::git+file://$startdir")
 sha256sums=('SKIP')
