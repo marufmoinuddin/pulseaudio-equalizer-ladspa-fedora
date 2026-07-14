@@ -3,7 +3,7 @@ rpmbuild/
 *.rpm
 *.src.rpm
 pkg/
-pulseaudio-equalizer-ladspa/
+pulseaudio-equalizer-ladspa*/
 *.tar.zst
 
 # Python

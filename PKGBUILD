@@ -1,6 +1,6 @@
 # Maintainer: Your Name <your@email.com>
 pkgname=pulseaudio-equalizer-ladspa-pipewire
-pkgver=r62.g20ded37
+pkgver=r64.g28fb35f
 pkgrel=1
 pkgdesc="PulseAudio/PipeWire equalizer using LADSPA plugins"
 arch=('x86_64' 'aarch64')
