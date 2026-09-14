@@ -27,7 +27,7 @@ echo "Building $PACKAGE_NAME version $VERSION"
 echo ""
 
 # Install RPM build tools if missing
-for pkg in rpm-build rpmdevtools meson ninja-build glib2-devel gtk3-devel python3-devel; do
+for pkg in rpm-build rpmdevtools gcc meson ninja-build glib2-devel gtk3-devel python3-devel; do
     if ! rpm -q "$pkg" &>/dev/null; then
         echo "Installing $pkg..."
         sudo dnf install -y "$pkg"

@@ -11,8 +11,10 @@ Source0:        %{name}-%{version}.tar.gz
 
 BuildArch:      noarch
 
+BuildRequires:  gcc
 BuildRequires:  glib2-devel
 BuildRequires:  gtk3-devel
+BuildRequires:  ladspa-swh-plugins
 BuildRequires:  meson >= 0.63.0
 BuildRequires:  ninja-build
 BuildRequires:  python3-devel
